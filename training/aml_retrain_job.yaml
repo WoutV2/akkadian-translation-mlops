@@ -13,13 +13,18 @@ environment:
 code: ..
 
 command: >-
-  pip install -r training/requirements.txt &&
-  python training/train.py
+  python training/train.py --dry-run
 
 environment_variables:
   OUTPUT_DIR: ./outputs/mbart-finetuned
+  TRAIN_CSV: ${{inputs.train_data}}
+  VAL_CSV: ${{inputs.validation_data}}
 
 inputs:
   train_data:
-    type: uri_folder
-    path: ../data
+    type: uri_file
+    path: azureml:train_cleaned:1
+  validation_data:
+    type: uri_file
+    path: azureml:validation_cleaned:1
+

@@ -52,10 +52,14 @@ jobs:
               --workspace-name verstraete-wout-ml \
               --download-path ./downloaded_outputs
             
-            mkdir -p ./inference/api/mbart-finetuned
-            # Copy all files from the output folder to the API build context
-            cp -r ./downloaded_outputs/artifacts/outputs/mbart-finetuned/* ./inference/api/mbart-finetuned/
-            ls -la ./inference/api/mbart-finetuned
+            # Copy all files from the output folder to the API build context if it exists and is not empty
+            if [ -d "./downloaded_outputs/artifacts/outputs/mbart-finetuned" ] && [ "$(ls -A ./downloaded_outputs/artifacts/outputs/mbart-finetuned 2>/dev/null)" ]; then
+              mkdir -p ./inference/api/mbart-finetuned
+              cp -r ./downloaded_outputs/artifacts/outputs/mbart-finetuned/* ./inference/api/mbart-finetuned/
+              ls -la ./inference/api/mbart-finetuned
+            else
+              echo "No model artifacts found in download. Model files will not be baked in (FastAPI will download from Hugging Face at startup)."
+            fi
           else
             echo "No successful retraining runs found. Model files will not be baked in (FastAPI will download from Hugging Face at startup)."
           fi
