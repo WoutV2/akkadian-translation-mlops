@@ -1,0 +1,10 @@
+feedback.db
+feedback_api_test.db
+feedback_test.db
+feedback_validation.db
+__pycache__
+*.pyc
+*.pyo
+*.db
+mbart-finetuned/checkpoint-*
+**/checkpoint-*

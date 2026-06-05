@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: validation_cleaned
+description: Cleaned Akkadian to English validation dataset
+type: uri_file
+path: ../data/validation_cleaned.csv

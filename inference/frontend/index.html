@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Akkadian to English MVP</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0f172a;
+        --panel: #111827;
+        --panel-2: #1f2937;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --accent: #f59e0b;
+        --accent-2: #22c55e;
+        --border: rgba(148, 163, 184, 0.22);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(245, 158, 11, 0.18), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.16), transparent 26%),
+          linear-gradient(160deg, #020617 0%, #0f172a 50%, #111827 100%);
+      }
+
+      .wrap {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 48px 20px 64px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .kicker {
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.2rem, 5vw, 4.4rem);
+        line-height: 0.96;
+        max-width: 10ch;
+      }
+
+      .subtitle {
+        max-width: 60ch;
+        color: var(--muted);
+        font-size: 1.03rem;
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
+      }
+
+      .card {
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 20px;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+
+      textarea, input {
+        width: 100%;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: rgba(17, 24, 39, 0.9);
+        color: var(--text);
+        padding: 14px 16px;
+        font: inherit;
+        outline: none;
+      }
+
+      textarea:focus, input:focus {
+        border-color: rgba(245, 158, 11, 0.55);
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+      }
+
+      textarea { min-height: 130px; resize: vertical; }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .primary { background: var(--accent); color: #111827; }
+      .secondary { background: rgba(148, 163, 184, 0.16); color: var(--text); }
+      .success { background: var(--accent-2); color: #052e16; }
+
+      .result {
+        min-height: 130px;
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(15, 23, 42, 0.65);
+        border: 1px solid var(--border);
+        white-space: pre-wrap;
+      }
+
+      .status {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .hidden { display: none; }
+
+      @media (max-width: 900px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <div class="kicker">Local MVP</div>
+        <h1>Akkadian to English translation with feedback capture</h1>
+        <p class="subtitle">
+          Start with the existing mBART flow, keep training time short for now, and use this UI to test the full loop locally.
+        </p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <label for="sourceText">Akkadian input</label>
+          <textarea id="sourceText" placeholder="Paste Akkadian text here"></textarea>
+
+          <div class="actions">
+            <button id="translateBtn" class="primary">Translate</button>
+            <button id="incorrectBtn" class="secondary" disabled>Incorrect</button>
+          </div>
+
+          <div id="feedbackPanel" class="hidden" style="margin-top:16px;">
+            <label for="correctedText">Corrected translation</label>
+            <textarea id="correctedText" placeholder="Enter the correct English translation"></textarea>
+            <div class="actions">
+              <input id="userId" placeholder="Optional user id" style="max-width: 240px;" />
+              <button id="saveFeedbackBtn" class="success">Save feedback</button>
+            </div>
+          </div>
+
+          <div id="status" class="status">Ready.</div>
+        </article>
+
+        <aside class="card">
+          <label>Translation</label>
+          <div id="translationResult" class="result">No translation yet.</div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  akk-api:
+    build:
+      context: ./inference/api
+      dockerfile: Dockerfile
+    environment:
+      # Use local sqlite by default for quick local testing
+      - DATABASE_URL=sqlite:///./feedback.db
+      - MODEL_DIR=/mbart-finetuned
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./inference/api:/app
+      - ./data:/data
+      - ./mbart-finetuned:/mbart-finetuned
+
+  frontend:
+    build:
+      context: ./inference/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - akk-api
+
+# Optional DB service (uncomment to enable Postgres; ensure psycopg2 is in requirements)
+#  db:
+#    image: postgres:15-alpine
+#    environment:
+#      POSTGRES_USER: mluser
+#      POSTGRES_PASSWORD: mlpass
+#      POSTGRES_DB: feedback
+#    volumes:
+#      - db_data:/var/lib/postgresql/data
+#    ports:
+#      - "5432:5432"
+
+volumes: {}

@@ -1,0 +1,22 @@
+# Ignore python virtual environments
+.venv/
+venv/
+env/
+
+# Ignore massive ML weights and checkpoints
+*.pkl
+*.onnx
+*.pt
+*.pth
+*.h5
+
+# Ignore your data/dataset folders (change 'data' to whatever your folder is named)
+data/
+datasets/
+__pycache__/
+
+# Ignore database files
+*.db
+
+# Ignore fine-tuned model directory (heavy weights)
+mbart-finetuned/

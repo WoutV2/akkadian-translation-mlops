@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: akk-ingress
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /translate
+        pathType: Exact
+        backend:
+          service:
+            name: akk-api
+            port:
+              number: 8000
+      - path: /feedback
+        pathType: Prefix
+        backend:
+          service:
+            name: akk-api
+            port:
+              number: 8000
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: akk-frontend
+            port:
+              number: 80

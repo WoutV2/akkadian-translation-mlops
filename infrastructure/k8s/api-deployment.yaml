@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akk-api
+  labels:
+    app: akk-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akk-api
+  template:
+    metadata:
+      labels:
+        app: akk-api
+    spec:
+      containers:
+      - name: api
+        image: myregistry/akk-api:latest   # replace with your image or build/tag locally
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: postgresql://mluser:mlpass@akk-postgres:5432/feedback
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "2Gi"
+          limits:
+            cpu: "1"
+            memory: "4Gi"
+        volumeMounts:
+        - name: api-code
+          mountPath: /app/app.py
+          subPath: app.py
+      volumes:
+      - name: api-code
+        configMap:
+          name: akk-api-code
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: akk-api
+spec:
+  selector:
+    app: akk-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP

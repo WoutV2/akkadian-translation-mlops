@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: train_cleaned
+description: Cleaned Akkadian to English training dataset
+type: uri_file
+path: ../data/train_cleaned.csv

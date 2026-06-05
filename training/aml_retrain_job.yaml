@@ -1,0 +1,25 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+description: Retrain Akkadian to English translation model (MBart)
+
+experiment_name: akkadian-translation-retrain
+
+compute: azureml:cpu-cluster
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+  conda_file: ./conda.yml
+
+code: ..
+
+command: >-
+  pip install -r training/requirements.txt &&
+  python training/train.py
+
+environment_variables:
+  OUTPUT_DIR: ./outputs/mbart-finetuned
+
+inputs:
+  train_data:
+    type: uri_folder
+    path: ../data

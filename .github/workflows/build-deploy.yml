@@ -1,0 +1,86 @@
+name: Build and Deploy API/Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'inference/**'
+      - 'infrastructure/k8s/**'
+  workflow_run:
+    workflows: ["Azure ML Retraining Pipeline"]
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI Extension
+        run: |
+          az extension add --name ml --yes
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name verstraetewoutmlacr2
+
+      - name: Download Latest Model from Azure ML
+        run: |
+          # Query the latest successful retraining job run
+          LATEST_RUN_ID=$(az ml job list \
+            --resource-group azure-ai \
+            --workspace-name verstraete-wout-ml \
+            --query "[?status=='Completed' && experiment_name=='akkadian-translation-retrain'].name" \
+            --output tsv | head -n 1)
+          
+          if [ -n "$LATEST_RUN_ID" ]; then
+            echo "Downloading model from run: $LATEST_RUN_ID"
+            az ml job download \
+              --name "$LATEST_RUN_ID" \
+              --resource-group azure-ai \
+              --workspace-name verstraete-wout-ml \
+              --download-path ./downloaded_outputs
+            
+            mkdir -p ./inference/api/mbart-finetuned
+            # Copy all files from the output folder to the API build context
+            cp -r ./downloaded_outputs/artifacts/outputs/mbart-finetuned/* ./inference/api/mbart-finetuned/
+            ls -la ./inference/api/mbart-finetuned
+          else
+            echo "No successful retraining runs found. Model files will not be baked in (FastAPI will download from Hugging Face at startup)."
+          fi
+
+      - name: Build and Push API Image
+        run: |
+          docker build -t verstraetewoutmlacr2.azurecr.io/akk-api:latest -f inference/api/Dockerfile inference/api
+          docker push verstraetewoutmlacr2.azurecr.io/akk-api:latest
+
+      - name: Build and Push Frontend Image
+        run: |
+          docker build -t verstraetewoutmlacr2.azurecr.io/akk-frontend:latest -f inference/frontend/Dockerfile inference/frontend
+          docker push verstraetewoutmlacr2.azurecr.io/akk-frontend:latest
+
+      - name: Set Kubernetes Context
+        uses: azure/k8s-set-context@v4
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Deploy to Kubernetes
+        run: |
+          # Replace placeholder registry tags with the real ACR login server name
+          sed -i 's|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g' infrastructure/k8s/api-deployment.yaml
+          sed -i 's|myregistry/akk-frontend:latest|verstraetewoutmlacr2.azurecr.io/akk-frontend:latest|g' infrastructure/k8s/frontend-deployment.yaml
+          
+          # Apply the updated Kubernetes manifests
+          kubectl apply -f infrastructure/k8s/
