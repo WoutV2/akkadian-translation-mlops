@@ -14,11 +14,11 @@ code: ..
 
 command: >-
   python training/train.py --dry-run
+  --train-csv ${{inputs.train_data}}
+  --val-csv ${{inputs.validation_data}}
 
 environment_variables:
   OUTPUT_DIR: ./outputs/mbart-finetuned
-  TRAIN_CSV: ${{inputs.train_data}}
-  VAL_CSV: ${{inputs.validation_data}}
 
 inputs:
   train_data:

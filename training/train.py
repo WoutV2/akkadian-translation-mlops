@@ -103,9 +103,9 @@ def download_azure_data():
     return train_path, val_path
 
 
-def main(dry_run: bool = False, use_azure_data: bool = False):
-    train_csv = TRAIN_CSV
-    val_csv = VAL_CSV
+def main(dry_run: bool = False, use_azure_data: bool = False, train_csv: str | None = None, val_csv: str | None = None):
+    train_csv = train_csv or TRAIN_CSV
+    val_csv = val_csv or VAL_CSV
 
     if use_azure_data:
         try:
@@ -219,5 +219,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Run a lightweight dry run without ML dependencies")
     parser.add_argument("--use-azure-data", action="store_true", help="Download and use data assets directly from Azure ML")
+    parser.add_argument("--train-csv", type=str, default=None, help="Path to training CSV file")
+    parser.add_argument("--val-csv", type=str, default=None, help="Path to validation CSV file")
     parsed = parser.parse_args()
-    main(dry_run=parsed.dry_run, use_azure_data=parsed.use_azure_data)
+    main(
+        dry_run=parsed.dry_run,
+        use_azure_data=parsed.use_azure_data,
+        train_csv=parsed.train_csv,
+        val_csv=parsed.val_csv,
+    )

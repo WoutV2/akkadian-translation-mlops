@@ -19,8 +19,9 @@ Recent actions:
     - Added custom Nginx config and updated frontend Dockerfile to proxy requests in docker-compose
     - Simplified Kubernetes ingress routing paths to avoid complex rewrites
     - Created `training/conda.yml` and updated Azure ML job specification path
+    - Added --train-csv and --val-csv arguments to `train.py` and successfully ran Azure ML retraining job dry run (`elated_comb_y5wb5ntfx7`)
 
 Next steps:
     - Test local integration using `docker-compose up --build`
-    - Run retraining on Azure ML using `az ml job create --file training/aml_retrain_job.yaml`
+    - Run full retraining on Azure ML (remove `--dry-run` in `aml_retrain_job.yaml`)
     - Deploy manifests to AKS or local k3d using `kubectl apply -f infrastructure/k8s/`
