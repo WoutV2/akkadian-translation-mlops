@@ -1,0 +1,71 @@
+name: Daily Feedback Retraining
+
+on:
+  schedule:
+    # Run every day at midnight (UTC)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual triggers for testing
+
+jobs:
+  check-and-retrain:
+    runs-on: ubuntu-latest
+    
+    # We need write permissions to push the updated dataset CSV back to GitHub
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas sqlalchemy psycopg2-binary
+
+      - name: Ingest feedback corrections
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python training/ingest_feedback.py
+
+      - name: Commit and Push dataset updates
+        id: commit_step
+        run: |
+          if [ -n "$(git status --porcelain data/train_cleaned.csv)" ]; then
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add data/train_cleaned.csv
+            git commit -m "chore: auto-ingest feedback corrections"
+            git push
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new feedback corrections to commit."
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to Azure
+        if: steps.commit_step.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI Extension
+        if: steps.commit_step.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          az extension add --name ml --yes
+
+      - name: Submit Azure ML Retraining Job
+        if: steps.commit_step.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          az ml job create \
+            --file training/aml_retrain_job.yaml \
+            --resource-group azure-ai \
+            --workspace-name verstraete-wout-ml \
+            --stream

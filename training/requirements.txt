@@ -7,3 +7,4 @@ azure-ai-ml
 azure-identity
 pyarrow==12.0.1
 protobuf
+accelerate>=0.26.0

@@ -159,6 +159,21 @@ def main(dry_run: bool = False, use_azure_data: bool = False, train_csv: str | N
     Seq2SeqTrainingArguments = _Seq2SeqTrainingArguments
     DataCollatorForSeq2Seq = _DataCollatorForSeq2Seq
 
+    cuda_available = torch.cuda.is_available()
+    logger.info("========================================")
+    logger.info("CUDA / GPU Verification:")
+    logger.info("CUDA Available in PyTorch: %s", cuda_available)
+    if cuda_available:
+        logger.info("GPU Device Count: %d", torch.cuda.device_count())
+        for i in range(torch.cuda.device_count()):
+            logger.info("  GPU %d Name: %s", i, torch.cuda.get_device_name(i))
+            logger.info("  GPU %d Capability: %s", i, torch.cuda.get_device_capability(i))
+            logger.info("  GPU %d Memory Allocated: %.2f GB", i, torch.cuda.memory_allocated(i) / 1e9)
+    else:
+        logger.warning("CUDA/GPU is NOT available to PyTorch. Training will run on CPU.")
+        logger.warning("If you are running in Docker, ensure Docker is configured with GPU support (e.g., --gpus all).")
+    logger.info("========================================")
+
     logger.info("Loading model and tokenizer: %s", MODEL_NAME)
     model = MBartForConditionalGeneration.from_pretrained(MODEL_NAME)
     tokenizer = MBart50TokenizerFast.from_pretrained(MODEL_NAME)
