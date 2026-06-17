@@ -6,14 +6,12 @@ experiment_name: akkadian-translation-retrain
 
 compute: azureml:cpu-cluster
 
-environment:
-  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
-  conda_file: ./conda.yml
+environment: azureml:aml-retrain-env:1
 
-code: ..
+code: .
 
 command: >-
-  python training/train.py --dry-run
+  python train.py
   --train-csv ${{inputs.train_data}}
   --val-csv ${{inputs.validation_data}}
 
