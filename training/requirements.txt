@@ -5,3 +5,4 @@ sentencepiece
 pandas
 azure-ai-ml
 azure-identity
+pyarrow==12.0.1
