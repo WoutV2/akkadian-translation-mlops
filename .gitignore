@@ -10,8 +10,7 @@ env/
 *.pth
 *.h5
 
-# Ignore your data/dataset folders (change 'data' to whatever your folder is named)
-data/
+# Ignore datasets/ but allow data/
 datasets/
 __pycache__/
 
