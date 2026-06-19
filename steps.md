@@ -25,3 +25,5 @@ Next steps:
     - Test local integration using `docker-compose up --build`
     - Run full retraining on Azure ML (remove `--dry-run` in `aml_retrain_job.yaml`)
     - Deploy manifests to AKS or local k3d using `kubectl apply -f infrastructure/k8s/`
+
+    also added docke buildx to prevent redownloading large package
