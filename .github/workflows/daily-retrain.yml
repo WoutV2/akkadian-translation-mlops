@@ -80,7 +80,11 @@ jobs:
             --download-path ./downloaded_model
           
           mkdir -p ./inference/api/mbart-finetuned
-          cp -r ./downloaded_model/akkadian-translation-model/* ./inference/api/mbart-finetuned/
+          if [ -d "./downloaded_model/akkadian-translation-model/mbart-finetuned" ]; then
+            cp -r ./downloaded_model/akkadian-translation-model/mbart-finetuned/* ./inference/api/mbart-finetuned/
+          else
+            cp -r ./downloaded_model/akkadian-translation-model/* ./inference/api/mbart-finetuned/
+          fi
           ls -la ./inference/api/mbart-finetuned
 
       - name: Build and Push API Image
