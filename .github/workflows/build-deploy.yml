@@ -38,7 +38,7 @@ jobs:
             --resource-group azure-ai \
             --workspace-name verstraete-wout-ml \
             --query "[0].version" \
-            --output tsv)
+            --output tsv || true)
           
           if [ -n "$LATEST_VERSION" ]; then
             echo "Downloading model version: $LATEST_VERSION"
