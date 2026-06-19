@@ -69,7 +69,7 @@ jobs:
       - name: Build and Push API Image
         uses: docker/build-push-action@v6
         with:
-          context: inference/api
+          context: ./inference/api
           file: inference/api/Dockerfile
           push: true
           tags: |
@@ -81,7 +81,7 @@ jobs:
       - name: Build and Push Frontend Image
         uses: docker/build-push-action@v6
         with:
-          context: inference/frontend
+          context: ./inference/frontend
           file: inference/frontend/Dockerfile
           push: true
           tags: |
