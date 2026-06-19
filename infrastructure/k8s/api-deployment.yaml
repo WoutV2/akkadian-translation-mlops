@@ -22,7 +22,10 @@ spec:
         - containerPort: 8000
         env:
         - name: DATABASE_URL
-          value: postgresql://mluser:mlpass@akk-postgres:5432/feedback
+          valueFrom:
+            secretKeyRef:
+              name: akk-postgres-secret
+              key: DATABASE_URL
         resources:
           requests:
             cpu: "250m"

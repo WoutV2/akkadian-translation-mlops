@@ -103,7 +103,7 @@ def download_azure_data():
     return train_path, val_path
 
 
-def main(dry_run: bool = False, use_azure_data: bool = False, train_csv: str | None = None, val_csv: str | None = None):
+def main(dry_run: bool = False, use_azure_data: bool = False, train_csv: str | None = None, val_csv: str | None = None, register: bool = True):
     train_csv = train_csv or TRAIN_CSV
     val_csv = val_csv or VAL_CSV
 
@@ -227,6 +227,34 @@ def main(dry_run: bool = False, use_azure_data: bool = False, train_csv: str | N
     model.save_pretrained(str(OUTPUT_DIR))
     tokenizer.save_pretrained(str(OUTPUT_DIR))
 
+    if register:
+        try:
+            from azure.identity import DefaultAzureCredential
+            from azure.ai.ml import MLClient
+            from azure.ai.ml.entities import Model
+
+            logger.info("Connecting to Azure ML workspace for model registration...")
+            credential = DefaultAzureCredential()
+            ml_client = MLClient(
+                credential=credential,
+                subscription_id="c282f4e7-0cf4-4c14-8e50-f6fecc19ce92",
+                resource_group_name="azure-ai",
+                workspace_name="verstraete-wout-ml"
+            )
+
+            logger.info("Registering model from path: %s", OUTPUT_DIR)
+            model_asset = Model(
+                path=str(OUTPUT_DIR),
+                type="custom_model",
+                name="akkadian-translation-model",
+                description="Finetuned mBART model for Akkadian to English translation"
+            )
+            
+            registered_model = ml_client.models.create_or_update(model_asset)
+            logger.info("Successfully registered model: %s version: %s", registered_model.name, registered_model.version)
+        except Exception as exc:
+            logger.error("Failed to register model in Azure ML: %s", exc)
+
 
 if __name__ == "__main__":
     import argparse
@@ -236,10 +264,17 @@ if __name__ == "__main__":
     parser.add_argument("--use-azure-data", action="store_true", help="Download and use data assets directly from Azure ML")
     parser.add_argument("--train-csv", type=str, default=None, help="Path to training CSV file")
     parser.add_argument("--val-csv", type=str, default=None, help="Path to validation CSV file")
+    parser.add_argument("--no-register", action="store_true", help="Do not register the model in Azure ML after training")
     parsed = parser.parse_args()
+    
+    # Do not register if dry run is selected
+    register_model = not parsed.dry_run and not parsed.no_register
+    
     main(
         dry_run=parsed.dry_run,
         use_azure_data=parsed.use_azure_data,
         train_csv=parsed.train_csv,
         val_csv=parsed.val_csv,
+        register=register_model,
     )
+

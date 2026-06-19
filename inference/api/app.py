@@ -33,6 +33,24 @@ NUM_BEAMS = int(os.getenv("NUM_BEAMS", "2"))
 
 Base = declarative_base()
 
+class TrainData(Base):
+    __tablename__ = "train_data"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    akkadian = Column(Text, nullable=False)
+    english = Column(Text, nullable=False)
+
+class ValidationData(Base):
+    __tablename__ = "validation_data"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    akkadian = Column(Text, nullable=False)
+    english = Column(Text, nullable=False)
+
+class TestData(Base):
+    __tablename__ = "test_data"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    akkadian = Column(Text, nullable=False)
+    english = Column(Text, nullable=False)
+
 class FeedbackCorrection(Base):
     __tablename__ = "feedback_corrections"
     id = Column(Integer, primary_key=True)
@@ -243,9 +261,20 @@ def submit_feedback(payload: FeedbackRequest) -> FeedbackResponse:
             user_id=payload.user_id.strip() if payload.user_id else None,
         )
         session.add(row)
+        
+        # Remove matching row from test data set
+        clean_source = payload.source_text.strip()
+        deleted_count = session.query(TestData).filter(TestData.akkadian == clean_source).delete()
+        if deleted_count > 0:
+            logging.info(f"Removed {deleted_count} matching row(s) from test_data table.")
+            
         session.commit()
         session.refresh(row)
         return FeedbackResponse(status="ok", id=row.id)
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Error in submit_feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         session.close()
 
