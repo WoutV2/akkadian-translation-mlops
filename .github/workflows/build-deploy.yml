@@ -38,25 +38,26 @@ jobs:
             --resource-group azure-ai \
             --workspace-name verstraete-wout-ml \
             --query "[0].version" \
-            --output tsv || true)
+            --output tsv 2>/dev/null || echo "ERROR")
           
-          if [ -n "$LATEST_VERSION" ]; then
-            echo "Downloading model version: $LATEST_VERSION"
-            az ml model download \
-              --name akkadian-translation-model \
-              --version "$LATEST_VERSION" \
-              --resource-group azure-ai \
-              --workspace-name verstraete-wout-ml \
-              --download-path ./downloaded_model
-            
-            mkdir -p ./inference/api/mbart-finetuned
-            cp -r ./downloaded_model/akkadian-translation-model/* ./inference/api/mbart-finetuned/
-            ls -la ./inference/api/mbart-finetuned
-            echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
-          else
-            echo "No registered model version found in registry. API container will start with HuggingFace default."
-            echo "LATEST_VERSION=latest" >> $GITHUB_ENV
+          if [ "$LATEST_VERSION" = "ERROR" ] || [ -z "$LATEST_VERSION" ]; then
+            echo "::error:: Model 'akkadian-translation-model' is not registered in the Azure ML workspace 'verstraete-wout-ml' under resource group 'azure-ai'."
+            echo "::error:: Please train and register the model first before deploying."
+            exit 1
           fi
+          
+          echo "Downloading model version: $LATEST_VERSION"
+          az ml model download \
+            --name akkadian-translation-model \
+            --version "$LATEST_VERSION" \
+            --resource-group azure-ai \
+            --workspace-name verstraete-wout-ml \
+            --download-path ./downloaded_model
+          
+          mkdir -p ./inference/api/mbart-finetuned
+          cp -r ./downloaded_model/akkadian-translation-model/* ./inference/api/mbart-finetuned/
+          ls -la ./inference/api/mbart-finetuned
+          echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
 
       - name: Build and Push API Image
         run: |
