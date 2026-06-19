@@ -8,16 +8,11 @@ on:
     paths:
       - 'inference/**'
       - 'infrastructure/k8s/**'
-  workflow_run:
-    workflows: ["Azure ML Retraining Pipeline"]
-    types:
-      - completed
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -35,56 +30,64 @@ jobs:
         run: |
           az acr login --name verstraetewoutmlacr2
 
-      - name: Download Latest Model from Azure ML
+      - name: Download Latest Model from Azure ML Registry
         run: |
-          # Query the latest successful retraining job run
-          LATEST_RUN_ID=$(az ml job list \
+          # Find the latest registered version of our translation model
+          LATEST_VERSION=$(az ml model list \
+            --name akkadian-translation-model \
             --resource-group azure-ai \
             --workspace-name verstraete-wout-ml \
-            --query "[?status=='Completed' && experiment_name=='akkadian-translation-retrain'].name" \
-            --output tsv | head -n 1)
+            --query "[0].version" \
+            --output tsv)
           
-          if [ -n "$LATEST_RUN_ID" ]; then
-            echo "Downloading model from run: $LATEST_RUN_ID"
-            az ml job download \
-              --name "$LATEST_RUN_ID" \
+          if [ -n "$LATEST_VERSION" ]; then
+            echo "Downloading model version: $LATEST_VERSION"
+            az ml model download \
+              --name akkadian-translation-model \
+              --version "$LATEST_VERSION" \
               --resource-group azure-ai \
               --workspace-name verstraete-wout-ml \
-              --download-path ./downloaded_outputs
+              --download-path ./downloaded_model
             
-            # Copy all files from the output folder to the API build context if it exists and is not empty
-            if [ -d "./downloaded_outputs/artifacts/outputs/mbart-finetuned" ] && [ "$(ls -A ./downloaded_outputs/artifacts/outputs/mbart-finetuned 2>/dev/null)" ]; then
-              mkdir -p ./inference/api/mbart-finetuned
-              cp -r ./downloaded_outputs/artifacts/outputs/mbart-finetuned/* ./inference/api/mbart-finetuned/
-              ls -la ./inference/api/mbart-finetuned
-            else
-              echo "No model artifacts found in download. Model files will not be baked in (FastAPI will download from Hugging Face at startup)."
-            fi
+            mkdir -p ./inference/api/mbart-finetuned
+            cp -r ./downloaded_model/akkadian-translation-model/* ./inference/api/mbart-finetuned/
+            ls -la ./inference/api/mbart-finetuned
+            echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
           else
-            echo "No successful retraining runs found. Model files will not be baked in (FastAPI will download from Hugging Face at startup)."
+            echo "No registered model version found in registry. API container will start with HuggingFace default."
+            echo "LATEST_VERSION=latest" >> $GITHUB_ENV
           fi
 
       - name: Build and Push API Image
         run: |
-          docker build -t verstraetewoutmlacr2.azurecr.io/akk-api:latest -f inference/api/Dockerfile inference/api
+          docker build \
+            -t verstraetewoutmlacr2.azurecr.io/akk-api:latest \
+            -t verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }} \
+            -f inference/api/Dockerfile inference/api
           docker push verstraetewoutmlacr2.azurecr.io/akk-api:latest
+          docker push verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }}
 
       - name: Build and Push Frontend Image
         run: |
           docker build -t verstraetewoutmlacr2.azurecr.io/akk-frontend:latest -f inference/frontend/Dockerfile inference/frontend
           docker push verstraetewoutmlacr2.azurecr.io/akk-frontend:latest
 
-      - name: Set Kubernetes Context
-        uses: azure/k8s-set-context@v4
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-
-      - name: Deploy to Kubernetes
+      - name: Set AKS Context
         run: |
-          # Replace placeholder registry tags with the real ACR login server name
-          sed -i 's|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g' infrastructure/k8s/api-deployment.yaml
+          az aks get-credentials --resource-group azure-ai --name akk-aks-cluster --overwrite-existing
+
+      - name: Deploy to AKS
+        run: |
+          # Apply database credentials as a Kubernetes secret dynamically
+          kubectl create secret generic akk-postgres-secret \
+            --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+          # Update container image placeholder in manifest to use the specific model version tag
+          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }}|g" infrastructure/k8s/api-deployment.yaml
           sed -i 's|myregistry/akk-frontend:latest|verstraetewoutmlacr2.azurecr.io/akk-frontend:latest|g' infrastructure/k8s/frontend-deployment.yaml
           
-          # Apply the updated Kubernetes manifests
+          # Delete the local statefulset DB manifest and apply AKS manifests
+          rm -f infrastructure/k8s/db-statefulset.yaml
           kubectl apply -f infrastructure/k8s/
+
