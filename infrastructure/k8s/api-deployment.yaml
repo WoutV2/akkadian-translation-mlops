@@ -14,6 +14,53 @@ spec:
       labels:
         app: akk-api
     spec:
+      initContainers:
+      - name: model-downloader
+        image: mcr.microsoft.com/azure-cli:2.61.0
+        env:
+        - name: AZURE_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              name: azure-credentials-secret
+              key: AZURE_CREDENTIALS
+        - name: MODEL_VERSION
+          value: "MODEL_VERSION_PLACEHOLDER"
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -e
+          echo "Parsing credentials..."
+          CLIENT_ID=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['clientId'])")
+          CLIENT_SECRET=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['clientSecret'])")
+          TENANT_ID=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['tenantId'])")
+          SUBSCRIPTION_ID=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['subscriptionId'])")
+
+          echo "Logging in to Azure..."
+          az login --service-principal -u "$CLIENT_ID" -p "$CLIENT_SECRET" --tenant "$TENANT_ID" > /dev/null
+          az account set --subscription "$SUBSCRIPTION_ID"
+
+          echo "Installing Azure ML CLI Extension..."
+          az extension add --name ml --yes
+
+          echo "Downloading latest translation model version $MODEL_VERSION..."
+          az ml model download \
+            --name akkadian-translation-model \
+            --version "$MODEL_VERSION" \
+            --resource-group azure-ai \
+            --workspace-name verstraete-wout-ml \
+            --download-path /tmp/downloaded_model
+
+          echo "Preparing shared volume..."
+          mkdir -p /model-dir
+          if [ -d "/tmp/downloaded_model/akkadian-translation-model/mbart-finetuned" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model/mbart-finetuned/* /model-dir/
+          else
+            cp -r /tmp/downloaded_model/akkadian-translation-model/* /model-dir/
+          fi
+          echo "Done downloading model weights."
+        volumeMounts:
+        - name: model-volume
+          mountPath: /model-dir
       containers:
       - name: api
         image: myregistry/akk-api:latest   # replace with your image or build/tag locally
@@ -26,6 +73,8 @@ spec:
             secretKeyRef:
               name: akk-postgres-secret
               key: DATABASE_URL
+        - name: MODEL_DIR
+          value: "/app/mbart-finetuned"
         resources:
           requests:
             cpu: "250m"
@@ -33,6 +82,12 @@ spec:
           limits:
             cpu: "1"
             memory: "4Gi"
+        volumeMounts:
+        - name: model-volume
+          mountPath: /app/mbart-finetuned
+      volumes:
+      - name: model-volume
+        emptyDir: {}
 
 
 ---

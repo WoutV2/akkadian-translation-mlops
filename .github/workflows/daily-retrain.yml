@@ -58,7 +58,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Download Latest Model from Azure ML Registry
+      - name: Get Latest Model Version from Azure ML Registry
         run: |
           # Find the latest registered version of our translation model
           LATEST_VERSION=$(az ml model list \
@@ -74,21 +74,7 @@ jobs:
             exit 1
           fi
           
-          echo "Downloading model version: $LATEST_VERSION"
-          az ml model download \
-            --name akkadian-translation-model \
-            --version "$LATEST_VERSION" \
-            --resource-group azure-ai \
-            --workspace-name verstraete-wout-ml \
-            --download-path ./downloaded_model
-          
-          mkdir -p ./inference/api/mbart-finetuned
-          if [ -d "./downloaded_model/akkadian-translation-model/mbart-finetuned" ]; then
-            cp -r ./downloaded_model/akkadian-translation-model/mbart-finetuned/* ./inference/api/mbart-finetuned/
-          else
-            cp -r ./downloaded_model/akkadian-translation-model/* ./inference/api/mbart-finetuned/
-          fi
-          ls -la ./inference/api/mbart-finetuned
+          echo "Latest model version: $LATEST_VERSION"
           echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
 
       - name: Build and Push API Image
@@ -99,7 +85,6 @@ jobs:
           push: true
           tags: |
             verstraetewoutmlacr2.azurecr.io/akk-api:latest
-            verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -113,11 +98,19 @@ jobs:
           kubectl create secret generic akk-postgres-secret \
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             --dry-run=client -o yaml | kubectl apply -f -
+
+          # Apply Azure credentials dynamically for the init container
+          kubectl create secret generic azure-credentials-secret \
+            --from-literal=AZURE_CREDENTIALS='${{ secrets.AZURE_CREDENTIALS }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
             
-          # Update container image placeholder in manifest to use the specific model version tag
-          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }}|g" infrastructure/k8s/api-deployment.yaml
+          # Update container image placeholder in manifest to use the lightweight API image
+          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g" infrastructure/k8s/api-deployment.yaml
           sed -i 's|myregistry/akk-frontend:latest|verstraetewoutmlacr2.azurecr.io/akk-frontend:latest|g' infrastructure/k8s/frontend-deployment.yaml
           
+          # Replace the model version placeholder in the manifest
+          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_VERSION }}|g" infrastructure/k8s/api-deployment.yaml
+
           # Delete the local statefulset DB manifest and apply AKS manifests
           rm -f infrastructure/k8s/db-statefulset.yaml
           kubectl apply -f infrastructure/k8s/
