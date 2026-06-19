@@ -23,8 +23,6 @@ INFERENCE_DIR = PROJECT_DIR / "inference"
 FRONTEND_DIR = INFERENCE_DIR / "frontend"
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{PROJECT_DIR / 'feedback.db'}")
-if DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.strip().strip("'\"").strip()
 MODEL_NAME = os.getenv("MODEL_NAME", "facebook/mbart-large-50-many-to-many-mmt")
 MODEL_DIR = os.getenv("MODEL_DIR", str(PROJECT_DIR / "mbart-finetuned")).strip()
 SRC_LANG = os.getenv("SRC_LANG", "ar_AR")

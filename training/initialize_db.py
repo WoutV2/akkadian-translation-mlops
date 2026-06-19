@@ -43,7 +43,7 @@ def get_database_url():
     url = os.getenv("DATABASE_URL")
     if not url:
         raise ValueError("DATABASE_URL environment variable is not set!")
-    return url.strip().strip("'\"").strip()
+    return url
 
 def load_and_map_df(path):
     df = pd.read_csv(path)

@@ -16,7 +16,6 @@ def main():
     if not DATABASE_URL:
         print("DATABASE_URL environment variable is not set!")
         sys.exit(1)
-    DATABASE_URL = DATABASE_URL.strip().strip("'\"").strip()
     
     engine = create_engine(DATABASE_URL)
     Session = sessionmaker(bind=engine)
