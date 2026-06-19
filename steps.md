@@ -20,6 +20,8 @@ Recent actions:
     - Simplified Kubernetes ingress routing paths to avoid complex rewrites
     - Created `training/conda.yml` and updated Azure ML job specification path
     - Added --train-csv and --val-csv arguments to `train.py` and successfully ran Azure ML retraining job dry run (`elated_comb_y5wb5ntfx7`)
+    - Added clickable Akkadian examples from the test dataset to the frontend UI for easier testing without language expertise
+
 
 Next steps:
     - Test local integration using `docker-compose up --build`

@@ -90,3 +90,11 @@ saveFeedbackBtn.addEventListener("click", async () => {
     setStatus(error.message);
   }
 });
+
+// Quick examples handler
+document.querySelectorAll(".example-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    sourceText.value = chip.getAttribute("data-text");
+    translateBtn.click();
+  });
+});

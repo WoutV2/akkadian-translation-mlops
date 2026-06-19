@@ -31,11 +31,3 @@ Last updated: 2026-06-02
 ## Notes
 - Use `mlops_project_guide.md` as the implementation reference.
 - Keep this checklist updated as tasks are completed.
-
-🔧 Extensions
-[ ] Deploy different versions of the model (small/medium/large)
-	- [ ] Add model-version tagging to training pipeline
-	- [ ] Publish model artifacts with version tags
-	- [ ] Create k8s manifests for each version (`model-small`, `model-medium`, `model-large`)
-	- [ ] Add deployment workflow to promote or rollout specific versions (canary/rolling)
-	- [ ] Add frontend/API support to select or route to a specific model version

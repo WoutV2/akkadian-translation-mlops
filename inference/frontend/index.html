@@ -138,6 +138,47 @@
         font-size: 0.92rem;
       }
 
+      .examples {
+        margin: 16px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .example-title {
+        font-size: 0.85rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .example-list {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .example-chip {
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        color: var(--accent);
+        padding: 6px 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .example-chip:hover {
+        background: rgba(245, 158, 11, 0.18);
+        border-color: var(--accent);
+        transform: translateY(-1px);
+      }
+
+      .example-chip:active {
+        transform: translateY(0);
+      }
+
       .hidden { display: none; }
 
       @media (max-width: 900px) {
@@ -159,6 +200,16 @@
         <article class="card">
           <label for="sourceText">Akkadian input</label>
           <textarea id="sourceText" placeholder="Paste Akkadian text here"></textarea>
+
+          <div class="examples">
+            <span class="example-title">Try an example from the test set:</span>
+            <div class="example-list">
+              <button class="example-chip" data-text="IGI {m}-ki-ṣir—aš-šur {lu₂}-:. GAL—ki-ṣir {lu₂}-:. GAL—ki-ṣir IGI {m}-{d}-PA—GIN—TI ina UD 01-KAM₂ IGI KA GI.NA ŠA₃ KUR DUG₃-ab" title="Click to try Moon Omen Report">🌙 Moon Omen Report</button>
+              <button class="example-chip" data-text="{m}-aš-šur—KALAG-an MAN {m}-SU—{d}-IM EN—ŠU.2-MEŠ EN—ŠU.2-MEŠ DI-mu ina E₂ a-na UN-MEŠ ša ina {uru}-NINA u₃ DI-mu is-se-ka {d}-EN u {d}-PA lip-qi-du" title="Click to try Royal Letter">👑 Royal Letter</button>
+              <button class="example-chip" data-text="IGI {m}-A—PAB IGI {m}-ba-ni-i {lu₂}-A.BA ki-i zu-un-nu ina KUR—URI {ki} i-te-qi₂-ru an-na-a ep-ša₂" title="Click to try Scribe's Advice">🌧️ Scribe Advice</button>
+              <button class="example-chip" data-text="a-na 03 me-re-e-še KU₂ IGI {m}-se-eʾ—nu-ri IGI {m}-{d}-šer₂—DINGIR-a.a ša {m}-ba-hi-a-ni ina pa-ni-šu₂-nu ina pu-u-hi it-ta-ṣu" title="Click to try Field Loan Contract">📜 Field Loan</button>
+            </div>
+          </div>
 
           <div class="actions">
             <button id="translateBtn" class="primary">Translate</button>
