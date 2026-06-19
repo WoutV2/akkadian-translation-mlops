@@ -22,7 +22,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          .\.venv\Scripts\python training/ingest_feedback.py
+          & "C:\Users\woutv\Documents\Howest\ML ops\Project\.venv\Scripts\python" training/ingest_feedback.py
 
       - name: Local GPU Retraining
         if: steps.ingest_step.outputs.has_changes == 'true'
@@ -31,7 +31,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FAST_TEST_RUN: "1" # Set to 0 to do full training, or 1 for fast-test run
         run: |
-          .\.venv\Scripts\python training/train.py --train-csv data/train_cleaned.csv --val-csv data/validation_cleaned.csv
+          & "C:\Users\woutv\Documents\Howest\ML ops\Project\.venv\Scripts\python" training/train.py --train-csv data/train_cleaned.csv --val-csv data/validation_cleaned.csv
 
   deploy:
     needs: check-and-retrain
