@@ -1,12 +1,14 @@
+import sys
 import os
-import pandas as pd
 from pathlib import Path
+
+# Add project root to sys.path before importing local modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from inference.api.app import FeedbackCorrection, Base
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main():
     PROJECT_DIR = Path(__file__).resolve().parents[1]
