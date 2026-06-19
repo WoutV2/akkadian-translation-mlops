@@ -86,8 +86,12 @@ jobs:
 
       - name: Build and Push API Image
         run: |
-          docker build -t verstraetewoutmlacr2.azurecr.io/akk-api:latest -f inference/api/Dockerfile inference/api
+          docker build \
+            -t verstraetewoutmlacr2.azurecr.io/akk-api:latest \
+            -t verstraetewoutmlacr2.azurecr.io/akk-api:v$LATEST_VERSION \
+            -f inference/api/Dockerfile inference/api
           docker push verstraetewoutmlacr2.azurecr.io/akk-api:latest
+          docker push verstraetewoutmlacr2.azurecr.io/akk-api:v$LATEST_VERSION
 
       - name: Set AKS Context
         run: |
@@ -100,8 +104,8 @@ jobs:
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
-          # Update container image placeholder in manifest
-          sed -i 's|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g' infrastructure/k8s/api-deployment.yaml
+          # Update container image placeholder in manifest to use the specific model version tag
+          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:v$LATEST_VERSION|g" infrastructure/k8s/api-deployment.yaml
           sed -i 's|myregistry/akk-frontend:latest|verstraetewoutmlacr2.azurecr.io/akk-frontend:latest|g' infrastructure/k8s/frontend-deployment.yaml
           
           # Delete the local statefulset DB manifest and apply AKS manifests
