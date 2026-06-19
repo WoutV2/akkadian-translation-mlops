@@ -100,3 +100,7 @@ jobs:
           # Delete the local statefulset DB manifest and apply AKS manifests
           rm -f infrastructure/k8s/db-statefulset.yaml
           kubectl apply -f infrastructure/k8s/
+
+          # Force rolling restart of the deployments to pull the fresh 'latest' images
+          kubectl rollout restart deployment/akk-frontend
+          kubectl rollout restart deployment/akk-api

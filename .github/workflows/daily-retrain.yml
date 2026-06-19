@@ -31,7 +31,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FAST_TEST_RUN: "1" # Set to 0 to do full training, or 1 for fast-test run
         run: |
-          & "$env:LOCAL_PYTHON_PATH" training/train.py --train-csv data/train_cleaned.csv --val-csv data/validation_cleaned.csv
+          & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data
 
   deploy:
     needs: check-and-retrain
@@ -114,4 +114,8 @@ jobs:
           # Delete the local statefulset DB manifest and apply AKS manifests
           rm -f infrastructure/k8s/db-statefulset.yaml
           kubectl apply -f infrastructure/k8s/
+
+          # Force rolling restart of the deployments to pull the fresh 'latest' images
+          kubectl rollout restart deployment/akk-frontend
+          kubectl rollout restart deployment/akk-api
 

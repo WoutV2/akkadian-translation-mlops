@@ -71,6 +71,10 @@ def main():
         df_test.to_csv(test_csv_path, index=False)
         print(f"Exported {len(df_test)} test rows.")
 
+        # Register/upload datasets to Azure ML (Blob Storage) if changes occurred
+        if has_changes:
+            register_azure_datasets(PROJECT_DIR)
+
         # Output changes indicator for GitHub actions
         github_output = os.getenv("GITHUB_OUTPUT")
         if github_output:
@@ -85,6 +89,50 @@ def main():
     finally:
         session.close()
 
+def register_azure_datasets(project_dir):
+    try:
+        from azure.identity import DefaultAzureCredential
+        from azure.ai.ml import MLClient
+        from azure.ai.ml.entities import Data
+        from azure.ai.ml.constants import AssetTypes
+        
+        print("Connecting to Azure ML workspace to register/update data assets...")
+        credential = DefaultAzureCredential()
+        ml_client = MLClient(
+            credential=credential,
+            subscription_id="c282f4e7-0cf4-4c14-8e50-f6fecc19ce92",
+            resource_group_name="azure-ai",
+            workspace_name="verstraete-wout-ml"
+        )
+        
+        data_dir = Path(project_dir) / "data"
+        train_csv = data_dir / "train_cleaned.csv"
+        val_csv = data_dir / "validation_cleaned.csv"
+        test_csv = data_dir / "test_cleaned.csv"
+
+        datasets = [
+            ("train_cleaned", train_csv, "Cleaned Akkadian to English training dataset"),
+            ("validation_cleaned", val_csv, "Cleaned Akkadian to English validation dataset"),
+            ("test_cleaned", test_csv, "Cleaned Akkadian to English test dataset")
+        ]
+        
+        for name, path, desc in datasets:
+            if path.exists():
+                print(f"Registering dataset '{name}' from {path}...")
+                data_asset = Data(
+                    path=str(path),
+                    type=AssetTypes.URI_FILE,
+                    description=desc,
+                    name=name
+                )
+                registered = ml_client.data.create_or_update(data_asset)
+                print(f"Successfully registered '{name}' version {registered.version}")
+            else:
+                print(f"Skipping registration for '{name}'; file not found at {path}")
+    except Exception as e:
+        print(f"Error during Azure ML dataset registration: {e}")
+
 if __name__ == "__main__":
     main()
+
 
