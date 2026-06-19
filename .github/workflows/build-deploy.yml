@@ -30,6 +30,9 @@ jobs:
         run: |
           az acr login --name verstraetewoutmlacr2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Download Latest Model from Azure ML Registry
         run: |
           # Find the latest registered version of our translation model
@@ -64,18 +67,27 @@ jobs:
           echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
 
       - name: Build and Push API Image
-        run: |
-          docker build \
-            -t verstraetewoutmlacr2.azurecr.io/akk-api:latest \
-            -t verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }} \
-            -f inference/api/Dockerfile inference/api
-          docker push verstraetewoutmlacr2.azurecr.io/akk-api:latest
-          docker push verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }}
+        uses: docker/build-push-action@v6
+        with:
+          context: inference/api
+          file: inference/api/Dockerfile
+          push: true
+          tags: |
+            verstraetewoutmlacr2.azurecr.io/akk-api:latest
+            verstraetewoutmlacr2.azurecr.io/akk-api:v${{ env.LATEST_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and Push Frontend Image
-        run: |
-          docker build -t verstraetewoutmlacr2.azurecr.io/akk-frontend:latest -f inference/frontend/Dockerfile inference/frontend
-          docker push verstraetewoutmlacr2.azurecr.io/akk-frontend:latest
+        uses: docker/build-push-action@v6
+        with:
+          context: inference/frontend
+          file: inference/frontend/Dockerfile
+          push: true
+          tags: |
+            verstraetewoutmlacr2.azurecr.io/akk-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Set AKS Context
         run: |
