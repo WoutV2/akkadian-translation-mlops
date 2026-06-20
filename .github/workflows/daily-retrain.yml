@@ -24,7 +24,7 @@ on:
 
 jobs:
   check-and-ingest:
-    runs-on: [self-hosted, Windows]
+    runs-on: ubuntu-latest
     outputs:
       has_changes: ${{ steps.ingest_step.outputs.has_changes }}
     
@@ -32,17 +32,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r training/requirements.txt
+
       - name: Ingest feedback corrections
         id: ingest_step
-        shell: powershell
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          $force_flag = ""
-          if ("${{ inputs.force_retrain }}" -eq "true") {
-              $force_flag = "--force"
-          }
-          & "$env:LOCAL_PYTHON_PATH" training/ingest_feedback.py $force_flag
+          if [ "${{ github.event.inputs.force_retrain }}" = "true" ]; then
+            python training/ingest_feedback.py --force
+          else
+            python training/ingest_feedback.py
+          fi
 
   retrain:
     needs: check-and-ingest
