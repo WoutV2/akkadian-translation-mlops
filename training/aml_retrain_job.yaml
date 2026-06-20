@@ -10,7 +10,7 @@ command: >-
   --max-steps ${{inputs.max_steps}}
   --no-register
 environment: azureml:aml-retrain-env:1
-compute: azureml:cpu-cluster
+compute: azureml:cpu-cluster-large
 environment_variables:
   OUTPUT_DIR: "outputs/mbart-finetuned-large"
   MAX_TRAIN_SAMPLES: "80"
