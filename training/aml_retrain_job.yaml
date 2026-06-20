@@ -1,0 +1,24 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+code: .
+command: >-
+  pip install -r requirements.txt &&
+  python train.py
+  --train-csv ${{inputs.train_csv}}
+  --val-csv ${{inputs.val_csv}}
+  --model-size ${{inputs.model_size}}
+  --max-steps ${{inputs.max_steps}}
+  --no-register
+environment: azureml:aml-retrain-env:1
+compute: azureml:cpu-cluster
+environment_variables:
+  OUTPUT_DIR: "outputs/mbart-finetuned-large"
+inputs:
+  train_csv:
+    type: uri_file
+    path: azureml:train_cleaned@latest
+  val_csv:
+    type: uri_file
+    path: azureml:validation_cleaned@latest
+  model_size: "small"
+  max_steps: 20

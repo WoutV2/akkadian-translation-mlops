@@ -23,7 +23,7 @@ on:
         type: boolean
 
 jobs:
-  check-and-retrain:
+  check-and-ingest:
     runs-on: [self-hosted, Windows]
     outputs:
       has_changes: ${{ steps.ingest_step.outputs.has_changes }}
@@ -44,27 +44,77 @@ jobs:
           }
           & "$env:LOCAL_PYTHON_PATH" training/ingest_feedback.py $force_flag
 
-      - name: Local GPU Retraining
-        if: steps.ingest_step.outputs.has_changes == 'true'
-        shell: powershell
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          FAST_TEST_RUN: "1" # Set to 0 to do full training, or 1 for fast-test run
+  retrain:
+    needs: check-and-ingest
+    if: needs.check-and-ingest.outputs.has_changes == 'true' || github.event.inputs.force_retrain == true
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI Extension
         run: |
-          $size = "${{ github.event.inputs.model_size }}"
-          if ($size -eq "small" -or $size -eq "medium" -or $size -eq "large") {
-              echo "Retraining single custom model: $size"
-              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size $size
-          } else {
-              echo "Retraining all three custom model variants..."
-              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size small
-              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size medium
-              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size large
+          az extension add --name ml --yes
+
+      - name: Submit Azure ML Retraining Job
+        run: |
+          SIZE="${{ github.event.inputs.model_size }}"
+          if [ -z "$SIZE" ]; then
+            SIZE="all"
+          fi
+          
+          submit_cloud_job() {
+            local size=$1
+            echo "=========================================================="
+            echo "Submitting Azure ML Cloud Job for model-size: $size"
+            echo "=========================================================="
+            
+            # Submit job and extract job name
+            JOB_NAME=$(az ml job create \
+              --file training/aml_retrain_job.yaml \
+              --set inputs.model_size=$size inputs.max_steps=20 \
+              --resource-group azure-ai \
+              --workspace-name verstraete-wout-ml \
+              --query name \
+              --output tsv)
+              
+            echo "Successfully submitted job: $JOB_NAME"
+            echo "Streaming logs for $JOB_NAME..."
+            az ml job show --name $JOB_NAME --web --stream -g azure-ai -w verstraete-wout-ml
+            
+            # Check job final status
+            STATUS=$(az ml job show --name $JOB_NAME --query status --output tsv -g azure-ai -w verstraete-wout-ml)
+            if [ "$STATUS" != "Completed" ]; then
+              echo "::error:: Azure ML Job $JOB_NAME failed with status $STATUS"
+              exit 1
+            fi
+            
+            echo "Azure ML Job $JOB_NAME completed successfully!"
+            echo "Registering fine-tuned model for $size variant..."
+            az ml model create \
+              --name akkadian-translation-model-$size \
+              --path "azureml://jobs/$JOB_NAME/outputs/artifacts/paths/outputs/mbart-finetuned-$size" \
+              --type custom_model \
+              -g azure-ai \
+              -w verstraete-wout-ml
           }
+          
+          if [ "$SIZE" = "all" ]; then
+            submit_cloud_job small
+            submit_cloud_job medium
+            submit_cloud_job large
+          else
+            submit_cloud_job $SIZE
+          fi
 
   deploy:
-    needs: check-and-retrain
-    if: needs.check-and-retrain.outputs.has_changes == 'true'
+    needs: retrain
     runs-on: ubuntu-latest
     
     steps:
