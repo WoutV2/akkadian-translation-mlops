@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from inference.api.app import FeedbackCorrection, TrainData, ValidationData, TestData
+from inference.api.models import FeedbackCorrection, TrainData, ValidationData, TestData
 
 def main(force: bool = False):
     """

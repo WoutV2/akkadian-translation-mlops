@@ -9,6 +9,3 @@ pyarrow==12.0.1
 protobuf
 accelerate>=0.26.0
 numpy<2
-SQLAlchemy
-fastapi
-psycopg2-binary

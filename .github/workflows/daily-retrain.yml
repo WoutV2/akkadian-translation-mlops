@@ -39,7 +39,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r training/requirements.txt
+          pip install pandas sqlalchemy psycopg2-binary "numpy<2"
 
       - name: Ingest feedback corrections
         id: ingest_step

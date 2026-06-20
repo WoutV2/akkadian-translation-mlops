@@ -12,8 +12,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from transformers import MBart50TokenizerFast, MBartForConditionalGeneration
 import json
 
@@ -37,48 +37,8 @@ NUM_BEAMS = int(os.getenv("NUM_BEAMS", "2"))
 SERVICE_MODEL_VERSION = os.getenv("SERVICE_MODEL_VERSION", "large").lower().strip()
 ACTIVE_VERSIONS = os.getenv("ACTIVE_VERSIONS", "small,medium,large").strip()
 
-# Database Schema Declarations using SQLAlchemy ORM
-Base = declarative_base()
-
-class TrainData(Base):
-    """
-    SQLAlchemy table for training datasets containing original/augmented Akkadian and English pairs.
-    """
-    __tablename__ = "train_data"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    akkadian = Column(Text, nullable=False)
-    english = Column(Text, nullable=False)
-
-class ValidationData(Base):
-    """
-    SQLAlchemy table for validating the translations during model training.
-    """
-    __tablename__ = "validation_data"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    akkadian = Column(Text, nullable=False)
-    english = Column(Text, nullable=False)
-
-class TestData(Base):
-    """
-    SQLAlchemy table containing the hold-out test set to evaluate translator generalization.
-    """
-    __tablename__ = "test_data"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    akkadian = Column(Text, nullable=False)
-    english = Column(Text, nullable=False)
-
-class FeedbackCorrection(Base):
-    """
-    SQLAlchemy table that stores correction feedback submitted by users through the UI.
-    """
-    __tablename__ = "feedback_corrections"
-    id = Column(Integer, primary_key=True)
-    source_text = Column(Text, nullable=False)     # The original Akkadian query
-    corrected_text = Column(Text, nullable=False)    # User's submitted correction
-    translated_text = Column(Text, nullable=True)   # The model's original translation
-    user_id = Column(String(64), nullable=True)     # Optional identifier for the user
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    handled = Column(Integer, default=0, nullable=False) # 0 = pending, 1 = ingested to training dataset
+# Database Schema Declarations imported from models.py
+from inference.api.models import Base, TrainData, ValidationData, TestData, FeedbackCorrection
 
 # Setup SQLAlchemy engine and thread-safe session factories
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
