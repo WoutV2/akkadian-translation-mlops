@@ -1,0 +1,128 @@
+name: Deploy Specific Model Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_size:
+        description: 'Model variant to deploy'
+        required: true
+        default: 'large'
+        type: choice
+        options:
+          - small
+          - medium
+          - large
+      model_version:
+        description: 'Azure ML registered model version (required for large)'
+        required: false
+        default: 'latest'
+        type: string
+      deployment_strategy:
+        description: 'Deployment rollout strategy'
+        required: true
+        default: 'rolling'
+        type: choice
+        options:
+          - rolling
+          - canary
+
+jobs:
+  deploy-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI Extension
+        if: github.event.inputs.model_size == 'large'
+        run: |
+          az extension add --name ml --yes
+
+      - name: Set AKS Context
+        run: |
+          az aks get-credentials --resource-group azure-ai --name akk-aks-cluster --overwrite-existing
+
+      - name: Determine Model Version for Large
+        if: github.event.inputs.model_size == 'large'
+        run: |
+          if [ "${{ github.event.inputs.model_version }}" = "latest" ]; then
+            LATEST_VERSION=$(az ml model list \
+              --name akkadian-translation-model-large \
+              --resource-group azure-ai \
+              --workspace-name verstraete-wout-ml \
+              --query "[0].version" \
+              --output tsv 2>/dev/null || echo "ERROR")
+            if [ "$LATEST_VERSION" = "ERROR" ] || [ -z "$LATEST_VERSION" ]; then
+              echo "::error:: Could not retrieve latest model version."
+              exit 1
+            fi
+            echo "Resolved latest model version: $LATEST_VERSION"
+            echo "MODEL_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
+          else
+            echo "MODEL_VERSION=${{ github.event.inputs.model_version }}" >> $GITHUB_ENV
+          fi
+
+      - name: Prepare Manifests
+        run: |
+          # Apply database credentials as a Kubernetes secret dynamically
+          kubectl create secret generic akk-postgres-secret \
+            --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Apply Azure credentials dynamically for the init container if large model
+          if [ "${{ github.event.inputs.model_size }}" = "large" ]; then
+            kubectl create secret generic azure-credentials-secret \
+              --from-literal=AZURE_CREDENTIALS='${{ secrets.AZURE_CREDENTIALS }}' \
+              --dry-run=client -o yaml | kubectl apply -f -
+            
+            sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.MODEL_VERSION }}|g" infrastructure/k8s/api-deployment-large.yaml
+          fi
+
+          # Replace registry placeholder in target manifest
+          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g" infrastructure/k8s/api-deployment-${{ github.event.inputs.model_size }}.yaml
+
+      - name: Apply Rollout Deployment
+        id: deploy_step
+        run: |
+          echo "Deploying ${{ github.event.inputs.model_size }} model..."
+          kubectl apply -f infrastructure/k8s/api-deployment-${{ github.event.inputs.model_size }}.yaml
+          
+          # Wait for Kubernetes rolling update to complete
+          if ! kubectl rollout status deployment/akk-api-${{ github.event.inputs.model_size }} --timeout=300s; then
+            echo "::error:: Deployment rollout failed or timed out. Triggering rollback..."
+            kubectl rollout undo deployment/akk-api-${{ github.event.inputs.model_size }}
+            exit 1
+          fi
+
+      - name: Perform Cluster Smoke Test
+        run: |
+          echo "Running in-cluster smoke test..."
+          
+          # Spawn a temporary curl pod to query the health endpoint of the deployed service variant
+          POD_NAME="smoke-test-run-${{ github.event.inputs.model_size }}"
+          kubectl run $POD_NAME --image=curlimages/curl --restart=Never --overrides='{ "spec": { "activeDeadlineSeconds": 60 } }' --command -- curl -s -f http://akk-api-${{ github.event.inputs.model_size }}:8000/health
+          
+          # Wait for the smoke test container to exit
+          if ! kubectl wait --for=condition=Completed pod/$POD_NAME --timeout=60s; then
+            echo "::error:: Smoke test timed out."
+            kubectl delete pod $POD_NAME --grace-period=0 --force
+            kubectl rollout undo deployment/akk-api-${{ github.event.inputs.model_size }}
+            exit 1
+          fi
+          
+          # Retrieve exit code of smoke test
+          EXIT_CODE=$(kubectl get pod $POD_NAME -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}')
+          kubectl delete pod $POD_NAME
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error:: Smoke test failed with exit code $EXIT_CODE. Rolling back deployment..."
+            kubectl rollout undo deployment/akk-api-${{ github.event.inputs.model_size }}
+            exit 1
+          else
+            echo "Smoke test passed successfully!"
+          fi

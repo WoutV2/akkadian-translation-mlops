@@ -1,16 +1,62 @@
 version: '3.8'
 
 services:
+  # The main API gateway (acts as a lightweight router)
   akk-api:
     build:
       context: ./inference/api
       dockerfile: Dockerfile
     environment:
-      # Use local sqlite by default for quick local testing
       - DATABASE_URL=sqlite:///./feedback.db
-      - MODEL_DIR=/mbart-finetuned
+      - SERVICE_MODEL_SIZE=router
+      - SMALL_API_URL=http://akk-api-small:8000
+      - MEDIUM_API_URL=http://akk-api-medium:8000
+      - LARGE_API_URL=http://akk-api-large:8000
     ports:
       - "8001:8000"
+    volumes:
+      - ./inference/api:/app
+      - ./data:/data
+    depends_on:
+      - akk-api-small
+      - akk-api-medium
+      - akk-api-large
+
+  # Small model instance (low resource usage, beam=1)
+  akk-api-small:
+    build:
+      context: ./inference/api
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=sqlite:///./feedback.db
+      - SERVICE_MODEL_SIZE=small
+      - MODEL_DIR=/nonexistent  # Force loading from HF baseline MODEL_NAME
+    volumes:
+      - ./inference/api:/app
+      - ./data:/data
+
+  # Medium model instance (low resource usage, beam=2)
+  akk-api-medium:
+    build:
+      context: ./inference/api
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=sqlite:///./feedback.db
+      - SERVICE_MODEL_SIZE=medium
+      - MODEL_DIR=/nonexistent  # Force loading from HF baseline MODEL_NAME
+    volumes:
+      - ./inference/api:/app
+      - ./data:/data
+
+  # Large model instance (fine-tuned model from local dir, beam=5)
+  akk-api-large:
+    build:
+      context: ./inference/api
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=sqlite:///./feedback.db
+      - SERVICE_MODEL_SIZE=large
+      - MODEL_DIR=/mbart-finetuned
     volumes:
       - ./inference/api:/app
       - ./data:/data
@@ -24,17 +70,3 @@ services:
       - "8080:80"
     depends_on:
       - akk-api
-
-# Optional DB service (uncomment to enable Postgres; ensure psycopg2 is in requirements)
-#  db:
-#    image: postgres:15-alpine
-#    environment:
-#      POSTGRES_USER: mluser
-#      POSTGRES_PASSWORD: mlpass
-#      POSTGRES_DB: feedback
-#    volumes:
-#      - db_data:/var/lib/postgresql/data
-#    ports:
-#      - "5432:5432"
-
-volumes: {}

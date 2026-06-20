@@ -21,12 +21,12 @@ Last updated: 2026-06-02
 - [x] Workflow: build and redeploy frontend/API on code changes
 
 ## Extensions
-- [ ] Deploy different versions of the model (small / medium / large)
-	- [ ] Add model-version tagging in training pipeline
-	- [ ] Publish model artifacts with version tags
-	- [ ] Add k8s manifests for each version (`model-small`, `model-medium`, `model-large`)
-	- [ ] Add deployment workflow (canary / rolling) to promote versions
-	- [ ] Add API/frontend option to select or route to a specific model version
+- [x] Deploy different versions of the model (small / medium / large)
+	- [x] Add model-version tagging in training pipeline
+	- [x] Publish model artifacts with version tags
+	- [x] Add k8s manifests for each version (`model-small`, `model-medium`, `model-large`)
+	- [x] Add deployment workflow (canary / rolling) to promote versions
+	- [x] Add API/frontend option to select or route to a specific model version
 
 ## Notes
 - Use `mlops_project_guide.md` as the implementation reference.

@@ -27,10 +27,12 @@ translateBtn.addEventListener("click", async () => {
   feedbackPanel.classList.add("hidden");
 
   try {
+    const modelSizeEl = document.getElementById("modelSize");
+    const model_size = modelSizeEl ? modelSizeEl.value : "large";
     const response = await fetch("/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, model_size }),
     });
 
     if (!response.ok) {
@@ -41,7 +43,7 @@ translateBtn.addEventListener("click", async () => {
     lastTranslation = data.translation || "";
     translatedText.textContent = lastTranslation || "No translation returned.";
     incorrectBtn.disabled = false;
-    setStatus(`Translated with ${data.model_source}.`);
+    setStatus(`Translated with ${data.model_source} (Size: ${data.model_size || model_size}).`);
   } catch (error) {
     translatedText.textContent = "Translation failed.";
     setStatus(error.message);

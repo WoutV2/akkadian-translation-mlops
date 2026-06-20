@@ -6,4 +6,5 @@ sentencepiece==0.2.1
 torch
 safetensors>=0.4.1
 pandas
-psycopg2-binary
+psycopg2-binary
+httpx

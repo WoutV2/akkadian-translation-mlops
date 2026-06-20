@@ -117,6 +117,7 @@ def main(
     val_csv: str | None = None,
     register: bool = True,
     max_steps: int | None = None,
+    model_size: str = "large",
 ):
     train_csv = train_csv or TRAIN_CSV
     val_csv = val_csv or VAL_CSV
@@ -285,11 +286,13 @@ def main(
                     shutil.copy(item, clean_reg_dir / item.name)
 
             logger.info("Registering model from clean path: %s", clean_reg_dir)
+            model_name = f"akkadian-translation-model-{model_size}"
             model_asset = Model(
                 path=str(clean_reg_dir),
                 type="custom_model",
-                name="akkadian-translation-model",
-                description="Finetuned mBART model for Akkadian to English translation"
+                name=model_name,
+                description=f"Finetuned mBART {model_size} model for Akkadian to English translation",
+                tags={"size": model_size}
             )
             
             registered_model = ml_client.models.create_or_update(model_asset)
@@ -311,6 +314,7 @@ if __name__ == "__main__":
     parser.add_argument("--val-csv", type=str, default=None, help="Path to validation CSV file")
     parser.add_argument("--no-register", action="store_true", help="Do not register the model in Azure ML after training")
     parser.add_argument("--max-steps", type=int, default=None, help="Limit training to a maximum number of steps (default: 200)")
+    parser.add_argument("--model-size", type=str, default="large", choices=["small", "medium", "large"], help="The size of the model (small, medium, large)")
     parsed = parser.parse_args()
     
     # Do not register if dry run is selected
@@ -323,4 +327,5 @@ if __name__ == "__main__":
         val_csv=parsed.val_csv,
         register=register_model,
         max_steps=parsed.max_steps,
+        model_size=parsed.model_size,
     )

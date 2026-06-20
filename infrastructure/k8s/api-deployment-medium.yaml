@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: akk-api
+  name: akk-api-medium
   labels:
-    app: akk-api
+    app: akk-api-medium
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: akk-api
+      app: akk-api-medium
   template:
     metadata:
       labels:
-        app: akk-api
+        app: akk-api-medium
     spec:
       containers:
       - name: api
-        image: myregistry/akk-api:latest   # replaced dynamically in workflow
+        image: verstraetewoutmlacr2.azurecr.io/akk-api:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -27,29 +27,25 @@ spec:
               name: akk-postgres-secret
               key: DATABASE_URL
         - name: SERVICE_MODEL_SIZE
-          value: "router"
-        - name: SMALL_API_URL
-          value: "http://akk-api-small:8000"
-        - name: MEDIUM_API_URL
-          value: "http://akk-api-medium:8000"
-        - name: LARGE_API_URL
-          value: "http://akk-api-large:8000"
+          value: "medium"
+        - name: MODEL_DIR
+          value: "/nonexistent"
         resources:
           requests:
-            cpu: "100m"
-            memory: "256Mi"
+            cpu: "250m"
+            memory: "2Gi"
           limits:
-            cpu: "300m"
-            memory: "512Mi"
+            cpu: "750m"
+            memory: "3.5Gi"
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: akk-api
+  name: akk-api-medium
 spec:
   selector:
-    app: akk-api
+    app: akk-api-medium
   ports:
     - protocol: TCP
       port: 8000
