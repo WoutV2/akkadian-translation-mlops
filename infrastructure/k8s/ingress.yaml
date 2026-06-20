@@ -1,4 +1,3 @@
-# Trigger rebuild with Buildx cache and relative local context path
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

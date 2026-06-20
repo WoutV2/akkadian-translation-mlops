@@ -17,11 +17,13 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from transformers import MBart50TokenizerFast, MBartForConditionalGeneration
 import json
 
+# Setup directory paths relative to this file
 _APP_PATH = Path(__file__).resolve()
 PROJECT_DIR = _APP_PATH.parents[2] if len(_APP_PATH.parents) > 2 else _APP_PATH.parent
 INFERENCE_DIR = PROJECT_DIR / "inference"
 FRONTEND_DIR = INFERENCE_DIR / "frontend"
 
+# Database & Model Config via Environment Variables (with SQLite and HF defaults)
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{PROJECT_DIR / 'feedback.db'}")
 MODEL_NAME = os.getenv("MODEL_NAME", "facebook/mbart-large-50-many-to-many-mmt")
 MODEL_DIR = os.getenv("MODEL_DIR", str(PROJECT_DIR / "mbart-finetuned")).strip()
@@ -31,49 +33,64 @@ MAX_SOURCE_LENGTH = int(os.getenv("MAX_SOURCE_LENGTH", "192"))
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "128"))
 NUM_BEAMS = int(os.getenv("NUM_BEAMS", "2"))
 
+# Database Schema Declarations using SQLAlchemy ORM
 Base = declarative_base()
 
 class TrainData(Base):
+    """
+    SQLAlchemy table for training datasets containing original/augmented Akkadian and English pairs.
+    """
     __tablename__ = "train_data"
     id = Column(Integer, primary_key=True, autoincrement=True)
     akkadian = Column(Text, nullable=False)
     english = Column(Text, nullable=False)
 
 class ValidationData(Base):
+    """
+    SQLAlchemy table for validating the translations during model training.
+    """
     __tablename__ = "validation_data"
     id = Column(Integer, primary_key=True, autoincrement=True)
     akkadian = Column(Text, nullable=False)
     english = Column(Text, nullable=False)
 
 class TestData(Base):
+    """
+    SQLAlchemy table containing the hold-out test set to evaluate translator generalization.
+    """
     __tablename__ = "test_data"
     id = Column(Integer, primary_key=True, autoincrement=True)
     akkadian = Column(Text, nullable=False)
     english = Column(Text, nullable=False)
 
 class FeedbackCorrection(Base):
+    """
+    SQLAlchemy table that stores correction feedback submitted by users through the UI.
+    """
     __tablename__ = "feedback_corrections"
     id = Column(Integer, primary_key=True)
-    source_text = Column(Text, nullable=False)
-    corrected_text = Column(Text, nullable=False)
-    translated_text = Column(Text, nullable=True)
-    user_id = Column(String(64), nullable=True)
+    source_text = Column(Text, nullable=False)     # The original Akkadian query
+    corrected_text = Column(Text, nullable=False)    # User's submitted correction
+    translated_text = Column(Text, nullable=True)   # The model's original translation
+    user_id = Column(String(64), nullable=True)     # Optional identifier for the user
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    handled = Column(Integer, default=0, nullable=False)
+    handled = Column(Integer, default=0, nullable=False) # 0 = pending, 1 = ingested to training dataset
 
+# Setup SQLAlchemy engine and thread-safe session factories
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Pydantic schemas for request/response serialization and validation
 class TranslateRequest(BaseModel):
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, description="Akkadian text to translate")
 
 class TranslateResponse(BaseModel):
-    translation: str
-    model_source: str
+    translation: str = Field(description="Generated English translation")
+    model_source: str = Field(description="Source of the model loaded (e.g. HuggingFace repo or local path)")
 
 class FeedbackRequest(BaseModel):
-    source_text: str = Field(min_length=1)
-    corrected_text: str = Field(min_length=1)
+    source_text: str = Field(min_length=1, description="Original Akkadian text")
+    corrected_text: str = Field(min_length=1, description="Corrected English translation")
     translated_text: str | None = None
     user_id: str | None = None
 
@@ -82,6 +99,10 @@ class FeedbackResponse(BaseModel):
     id: int
 
 class TranslationService:
+    """
+    A service class wrapping tokenizer initialization, HuggingFace model load,
+    tokenizer sanitization patches, and thread-safe translation inference.
+    """
     def __init__(self, model_source: str, model: MBartForConditionalGeneration, tokenizer: MBart50TokenizerFast):
         self.model_source = model_source
         self.model = model
@@ -89,11 +110,16 @@ class TranslationService:
 
     @classmethod
     def load(cls) -> "TranslationService":
+        """
+        Initializes and returns the TranslationService. Decides whether to load the model
+        from a local fine-tuned directory or pull it from the HuggingFace model registry.
+        """
         model_source = MODEL_DIR if MODEL_DIR and Path(MODEL_DIR).exists() else MODEL_NAME
         logging.basicConfig(level=logging.INFO)
         logger = logging.getLogger("translation")
         logger.info("Using model source: %s", model_source)
 
+        # Validate directory content if loading a local fine-tuned model
         if model_source != MODEL_NAME:
             ms_path = Path(model_source)
             has_weights = any((ms_path / fname).exists() for fname in (
@@ -108,6 +134,11 @@ class TranslationService:
                 )
 
         def _sanitize_local_tokenizer(dir_path: Path) -> None:
+            """
+            Sanitizes the configuration files of the local tokenizer.
+            Older versions of transformers use extra_special_tokens which can lead to
+            compatibility issues in newer environments. We map it to additional_special_tokens.
+            """
             for fname in ("tokenizer_config.json", "tokenizer.json"):
                 p = dir_path / fname
                 if not p.exists():
@@ -135,11 +166,13 @@ class TranslationService:
                     except Exception as e:
                         logger.warning("Failed to write patched tokenizer file %s: %s", p, e)
 
+        # Apply the sanitization patch before loading the tokenizer to avoid parsing crashes
         try:
             _sanitize_local_tokenizer(ms_path)
         except Exception:
             logger.info("Tokenizer sanitization failed or was skipped")
 
+        # Load MBartForConditionalGeneration model weights
         try:
             model = MBartForConditionalGeneration.from_pretrained(model_source)
         except Exception as exc:
@@ -149,6 +182,7 @@ class TranslationService:
                 " Fix model files or remove MODEL_DIR."
             )
 
+        # Load the fast tokenizer wrapper
         try:
             tokenizer = MBart50TokenizerFast.from_pretrained(model_source)
         except Exception as exc:
@@ -166,14 +200,20 @@ class TranslationService:
             else:
                 raise
 
+        # Setup source & target language tokens
         tokenizer.src_lang = SRC_LANG
         tokenizer.tgt_lang = TGT_LANG
+        
+        # Add Akkadian-specific special tokens for gaps (e.g. damaged/missing script pieces)
         try:
             tokenizer.add_special_tokens({"additional_special_tokens": ["<gap>", "<big_gap>"]})
         except Exception:
             logger.info("Could not add extra special tokens to tokenizer; continuing")
 
+        # Resize model embeddings if new special tokens were added
         model.resize_token_embeddings(len(tokenizer))
+        
+        # Enforce target language tokens at generation start
         if hasattr(tokenizer, "lang_code_to_id") and TGT_LANG in tokenizer.lang_code_to_id:
             target_lang_id = tokenizer.lang_code_to_id[TGT_LANG]
             model.config.decoder_start_token_id = target_lang_id
@@ -181,6 +221,7 @@ class TranslationService:
             model.generation_config.decoder_start_token_id = target_lang_id
             model.generation_config.forced_bos_token_id = target_lang_id
 
+        # Place model in evaluation mode and move to GPU if available
         model.eval()
         if torch.cuda.is_available():
             model.to("cuda")
@@ -188,6 +229,10 @@ class TranslationService:
         return cls(model_source=model_source, model=model, tokenizer=tokenizer)
 
     def translate(self, text: str) -> str:
+        """
+        Executes tokenizer encoding, model generation, and decoding.
+        Includes a repetition penalty and prevents repeating n-grams to stabilize output.
+        """
         encoded = self.tokenizer(text, return_tensors="pt", max_length=MAX_SOURCE_LENGTH, truncation=True)
         if torch.cuda.is_available():
             encoded = {k: v.to("cuda") for k, v in encoded.items()}
@@ -204,31 +249,41 @@ class TranslationService:
         translation = self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
         return translation
 
+# Global translation service instance (lazy-loaded in lifespan)
 translation_service: TranslationService | None = None
 
 def init_db() -> None:
+    """Helper to create all database tables if they do not exist."""
     Base.metadata.create_all(bind=engine)
 
 def get_translation_service() -> TranslationService:
+    """Retrieves translation service instance, failing if not initialized."""
     if translation_service is None:
         raise RuntimeError("Translation service is not ready")
     return translation_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    FastAPI lifespan context manager. Performs database setup and compiles
+    the translation model at application startup, releasing memory at shutdown.
+    """
     global translation_service
     init_db()
     translation_service = TranslationService.load()
     yield
     translation_service = None
 
-app = FastAPI(title="Akkadian to English MVP", lifespan=lifespan)
+# Initialize FastAPI application
+app = FastAPI(title="Akkadian to English Translation Hub", lifespan=lifespan)
 
+# Mount the static frontend directory if it exists
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 def serve_frontend() -> FileResponse:
+    """Serves the main frontend page."""
     index_file = FRONTEND_DIR / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="Frontend not found")
@@ -236,10 +291,12 @@ def serve_frontend() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Health check endpoint for Kubernetes probes and CI smoke tests."""
     return {"status": "ok"}
 
 @app.get("/config")
 def config() -> dict[str, str]:
+    """Exposes current active runtime configurations for debugging."""
     return {
         "model_source": translation_service.model_source if translation_service else "loading",
         "database_url": DATABASE_URL,
@@ -247,11 +304,17 @@ def config() -> dict[str, str]:
 
 @app.post("/translate", response_model=TranslateResponse)
 def translate(payload: TranslateRequest) -> TranslateResponse:
+    """Translates the input Akkadian string using the active TranslationService."""
     service = get_translation_service()
     return TranslateResponse(translation=service.translate(payload.text), model_source=service.model_source)
 
 @app.post("/feedback", response_model=FeedbackResponse)
 def submit_feedback(payload: FeedbackRequest) -> FeedbackResponse:
+    """
+    Saves user-submitted translation feedback to the SQLite/PostgreSQL database.
+    To prevent evaluation contamination, we remove the matching source text
+    from the hold-out test set if it exists there.
+    """
     session = SessionLocal()
     try:
         row = FeedbackCorrection(
@@ -262,7 +325,7 @@ def submit_feedback(payload: FeedbackRequest) -> FeedbackResponse:
         )
         session.add(row)
         
-        # Remove matching row from test data set
+        # Contamination prevention: remove matching row from test data set
         clean_source = payload.source_text.strip()
         deleted_count = session.query(TestData).filter(TestData.akkadian == clean_source).delete()
         if deleted_count > 0:
@@ -280,6 +343,11 @@ def submit_feedback(payload: FeedbackRequest) -> FeedbackResponse:
 
 @app.post("/feedback/ingest")
 def ingest_feedback() -> dict:
+    """
+    Endpoint triggering immediate ingestion of unhandled feedback corrections.
+    Fetches unhandled rows, updates database handled flags, and appends the 
+    corrections directly to `train_cleaned.csv`.
+    """
     session = SessionLocal()
     try:
         unhandled = session.query(FeedbackCorrection).filter_by(handled=0).all()

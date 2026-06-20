@@ -6,30 +6,35 @@ from sqlalchemy import Column, Integer, Text, String, DateTime, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone
 
+# Add project root directory to system path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_DIR))
 
 Base = declarative_base()
 
 class TrainData(Base):
+    """SQLAlchemy table for training datasets containing Akkadian and English pairs."""
     __tablename__ = "train_data"
     id = Column(Integer, primary_key=True, autoincrement=True)
     akkadian = Column(Text, nullable=False)
     english = Column(Text, nullable=False)
 
 class ValidationData(Base):
+    """SQLAlchemy table for validating the translations during model training."""
     __tablename__ = "validation_data"
     id = Column(Integer, primary_key=True, autoincrement=True)
     akkadian = Column(Text, nullable=False)
     english = Column(Text, nullable=False)
 
 class TestData(Base):
+    """SQLAlchemy table containing the hold-out test set to evaluate translator generalization."""
     __tablename__ = "test_data"
     id = Column(Integer, primary_key=True, autoincrement=True)
     akkadian = Column(Text, nullable=False)
     english = Column(Text, nullable=False)
 
 class FeedbackCorrection(Base):
+    """SQLAlchemy table that stores correction feedback submitted by users through the UI."""
     __tablename__ = "feedback_corrections"
     id = Column(Integer, primary_key=True, autoincrement=True)
     source_text = Column(Text, nullable=False)
@@ -40,23 +45,29 @@ class FeedbackCorrection(Base):
     handled = Column(Integer, default=0, nullable=False)
 
 def get_database_url():
+    """Retrieves the DATABASE_URL environment variable, raising an error if it is not set."""
     url = os.getenv("DATABASE_URL")
     if not url:
         raise ValueError("DATABASE_URL environment variable is not set!")
     return url
 
 def load_and_map_df(path):
+    """Loads a CSV file and normalizes headers to 'akkadian' and 'english'."""
     df = pd.read_csv(path)
     if "source_text" in df.columns:
         df = df.rename(columns={"source_text": "akkadian", "target_text": "english"})
     return df[["akkadian", "english"]]
 
 def main():
+    """
+    Main database migration and initialization function. Creates DB tables if they don't exist,
+    migrates/populates initial dataset entries from local clean CSV files, and registers files to Azure ML.
+    """
     db_url = get_database_url()
     print(f"Connecting to database...")
     engine = create_engine(db_url)
     
-    # Create tables
+    # 1. Create all SQL tables
     print("Creating tables if they do not exist...")
     Base.metadata.create_all(bind=engine)
     
@@ -64,14 +75,14 @@ def main():
     session = Session()
     
     try:
-        # Load and insert train_data
+        # 2. Populate TrainData table if empty
         if session.query(TrainData).first() is None:
             train_csv = PROJECT_DIR / "data" / "train_cleaned.csv"
             if train_csv.exists():
                 print(f"Loading train data from {train_csv}...")
                 df = load_and_map_df(train_csv)
                 print(f"Inserting {len(df)} train rows into DB...")
-                # Write to sql in chunks
+                # Write to database in chunks of 1000 to prevent buffer overflow/memory consumption
                 df.to_sql("train_data", con=engine, if_exists="append", index=False, chunksize=1000)
                 print("Train data loaded successfully.")
             else:
@@ -79,7 +90,7 @@ def main():
         else:
             print("train_data table already contains data. Skipping migration.")
 
-        # Load and insert validation_data
+        # 3. Populate ValidationData table if empty
         if session.query(ValidationData).first() is None:
             val_csv = PROJECT_DIR / "data" / "validation_cleaned.csv"
             if val_csv.exists():
@@ -93,7 +104,7 @@ def main():
         else:
             print("validation_data table already contains data. Skipping migration.")
 
-        # Load and insert test_data
+        # 4. Populate TestData table if empty
         if session.query(TestData).first() is None:
             test_csv = PROJECT_DIR / "data" / "test_cleaned.csv"
             if test_csv.exists():
@@ -116,10 +127,13 @@ def main():
         
     print("Database initialization and migration completed.")
 
-    # Register/upload datasets to Azure ML (Blob Storage)
+    # 5. Register initial/updated datasets to Azure ML Studio
     register_azure_datasets()
 
 def register_azure_datasets():
+    """
+    Registers the initial datasets to Azure ML Studio workspace default storage container.
+    """
     try:
         from azure.identity import DefaultAzureCredential
         from azure.ai.ml import MLClient
@@ -164,4 +178,3 @@ def register_azure_datasets():
 
 if __name__ == "__main__":
     main()
-

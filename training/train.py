@@ -6,7 +6,7 @@ import logging
 
 import pandas as pd
 
-# Heavy ML imports are deferred to runtime so `--dry-run` can work without installing packages
+# Heavy ML imports are deferred to runtime so `--dry-run` can work without installing heavy ML packages
 torch = None
 Dataset = None
 MBartForConditionalGeneration = None
@@ -27,6 +27,7 @@ TRAIN_CSV = os.getenv("TRAIN_CSV", str(DATA_DIR / "train_cleaned.csv"))
 VAL_CSV = os.getenv("VAL_CSV", str(DATA_DIR / "validation_cleaned.csv"))
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", str(PROJECT_DIR / "mbart-finetuned"))
 MODEL_NAME = os.getenv("MODEL_NAME", "facebook/mbart-large-50-many-to-many-mmt")
+
 # Fast-test mode mirrors the notebook: use smaller sample caps and fewer epochs
 FAST_TEST_RUN = os.getenv("FAST_TEST_RUN", "1") in ("1", "true", "True")
 BLOCK_LENGTH = int(os.getenv("BLOCK_LENGTH", "192"))
@@ -40,6 +41,7 @@ MAX_STEPS = int(os.getenv("MAX_STEPS", "200"))
 
 
 def load_csv(path: str, max_rows: int | None = None) -> pd.DataFrame:
+    """Helper to load CSV and optionally sample a subset of rows to limit training runtime."""
     df = pd.read_csv(path)
     if max_rows and max_rows > 0 and len(df) > max_rows:
         df = df.sample(n=max_rows, random_state=42).reset_index(drop=True)
@@ -47,6 +49,10 @@ def load_csv(path: str, max_rows: int | None = None) -> pd.DataFrame:
 
 
 def download_azure_data():
+    """
+    Downloads training and validation datasets from the Azure ML workspace blob storage.
+    Uses DefaultAzureCredential for secure service principal authentication in production.
+    """
     from azure.identity import DefaultAzureCredential
     from azure.ai.ml import MLClient
     from azure.storage.blob import BlobClient
@@ -65,7 +71,7 @@ def download_azure_data():
     tmp_dir = Path(tempfile.gettempdir()) / "azure_ml_data"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get datastore details (including credentials/SAS token)
+    # Get workspace default datastore details (including secrets/SAS token)
     datastore = ml_client.datastores.get("workspaceblobstore", include_secrets=True)
     storage_account_name = datastore.account_name
     container_name = datastore.container_name
@@ -78,7 +84,7 @@ def download_azure_data():
         asset = ml_client.data.get(name=asset_name, label="latest")
         path_uri = asset.path
         
-        # Extract the blob path relative to the datastore
+        # Extract the blob path relative to the datastore root
         marker = "/paths/"
         idx = path_uri.find(marker)
         if idx == -1:
@@ -100,7 +106,7 @@ def download_azure_data():
     train_path = download_asset("train_cleaned", "train_cleaned.csv")
     val_path = download_asset("validation_cleaned", "validation_cleaned.csv")
 
-    logger.info("Data assets downloaded successfully.")
+    logger.info("Data assets downloaded successfully from Azure ML.")
     return train_path, val_path
 
 
@@ -116,6 +122,7 @@ def main(
     val_csv = val_csv or VAL_CSV
     max_steps = max_steps if max_steps is not None else MAX_STEPS
 
+    # If enabled, fetch dataset assets from Azure ML Cloud datastore
     if use_azure_data:
         try:
             train_csv, val_csv = download_azure_data()
@@ -129,8 +136,9 @@ def main(
 
     logger.info("Train samples: %s; Val samples: %s", len(df_train), len(df_val))
 
+    # Dry-run validation check without importing PyTorch or Transformers
     if dry_run:
-        # Lightweight checks without ML deps: sample and basic tokenization
+        # Lightweight checks: sample and verify text formatting and whitespace token counts
         sample_train = df_train.sample(n=min(5, len(df_train)), random_state=42).reset_index(drop=True)
         for i, row in sample_train.iterrows():
             src = row.get("akkadian") or row.get("source_text") or ""
@@ -141,10 +149,10 @@ def main(
             print(f"\nSample {i+1} source: {clean_src}")
             print(f"Sample {i+1} target: {clean_tgt}")
             print(f"Source tokens (whitespace): {len(src.split())}; Target tokens: {len(tgt.split())}")
-        print("\nDry run complete — preprocessing and basic checks passed.")
+        print("\nDry run complete — preprocessing and basic checks passed successfully.")
         return
 
-    # Real training: import heavy libs now (so dry-run can skip them)
+    # Real training: import heavy ML libraries now (so dry-run can skip them entirely)
     global torch, Dataset, MBartForConditionalGeneration, MBart50TokenizerFast, Seq2SeqTrainer, Seq2SeqTrainingArguments, DataCollatorForSeq2Seq
     try:
         import torch as _torch
@@ -168,6 +176,7 @@ def main(
     Seq2SeqTrainingArguments = _Seq2SeqTrainingArguments
     DataCollatorForSeq2Seq = _DataCollatorForSeq2Seq
 
+    # CUDA device capability logging
     cuda_available = torch.cuda.is_available()
     logger.info("========================================")
     logger.info("CUDA / GPU Verification:")
@@ -183,28 +192,35 @@ def main(
         logger.warning("If you are running in Docker, ensure Docker is configured with GPU support (e.g., --gpus all).")
     logger.info("========================================")
 
+    # Initialize fine-tuned model and language tokenizer
     logger.info("Loading model and tokenizer: %s", MODEL_NAME)
     model = MBartForConditionalGeneration.from_pretrained(MODEL_NAME)
     tokenizer = MBart50TokenizerFast.from_pretrained(MODEL_NAME)
     tokenizer.src_lang = os.getenv("SRC_LANG", "ar_AR")
     tokenizer.tgt_lang = os.getenv("TGT_LANG", "en_XX")
+    
+    # Register custom Akkadian structural tokens in the tokenizer
     tokenizer.add_special_tokens({"additional_special_tokens": ["<gap>", "<big_gap>"]})
     model.resize_token_embeddings(len(tokenizer))
 
+    # Load dataframes into HuggingFace dataset format
     train_ds = Dataset.from_pandas(df_train)
     val_ds = Dataset.from_pandas(df_val)
 
     def preprocess(examples):
+        """Tokenize Akkadian and English strings using maximum block boundary lengths."""
         inputs = tokenizer(examples["akkadian"], truncation=True, max_length=MAX_SOURCE_LENGTH)
         labels = tokenizer(examples["english"], truncation=True, max_length=MAX_TARGET_LENGTH)
         inputs["labels"] = labels["input_ids"]
         return inputs
 
+    # Map preprocessing function to batch-tokenize the datasets
     train_tok = train_ds.map(preprocess, batched=True)
     val_tok = val_ds.map(preprocess, batched=True)
 
     data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, label_pad_token_id=-100)
 
+    # Setup training configurations (epochs, batch sizes, steps)
     training_args = Seq2SeqTrainingArguments(
         output_dir=str(OUTPUT_DIR),
         per_device_train_batch_size=BATCH_SIZE,
@@ -221,6 +237,7 @@ def main(
         fp16=torch.cuda.is_available(),
     )
 
+    # Instantiate the standard HuggingFace Seq2SeqTrainer
     trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
@@ -230,13 +247,16 @@ def main(
         processing_class=tokenizer,
     )
 
+    # Run the training loop
     logger.info("Starting training for %s epochs", NUM_EPOCHS)
     trainer.train()
 
+    # Save fine-tuned model and tokenizer weights locally
     logger.info("Saving final model to %s", OUTPUT_DIR)
     model.save_pretrained(str(OUTPUT_DIR))
     tokenizer.save_pretrained(str(OUTPUT_DIR))
 
+    # Register the newly trained model version to Azure ML Model Registry
     if register:
         try:
             from azure.identity import DefaultAzureCredential
@@ -281,7 +301,6 @@ def main(
             logger.error("Failed to register model in Azure ML: %s", exc)
 
 
-
 if __name__ == "__main__":
     import argparse
 
@@ -305,4 +324,3 @@ if __name__ == "__main__":
         register=register_model,
         max_steps=parsed.max_steps,
     )
-

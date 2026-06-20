@@ -5,7 +5,7 @@ Last updated: 2026-06-02
 ## Task 1 — Cloud Training (Azure ML)
 - [x] Create local training script (`training/train.py`) using the Akkadian dataset
 - [x] Add Azure ML job spec (`training/aml_retrain_job.yaml`) and test submission
-- [ ] Run a successful Azure ML pipeline job (verify artifacts stored)
+- [x] Run a successful Azure ML pipeline job (verify artifacts stored)
 
 ## Task 2 — Kubernetes Deployment (k3d)
 - [x] Implement FastAPI backend (`inference/api/app.py`) with `/translate` and `/feedback`
