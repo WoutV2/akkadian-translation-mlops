@@ -2,7 +2,7 @@ $schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
 type: command
 code: .
 command: >-
-  pip install -r requirements.txt &&
+  pip install accelerate &&
   python train.py
   --train-csv ${{inputs.train_csv}}
   --val-csv ${{inputs.val_csv}}
