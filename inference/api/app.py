@@ -33,11 +33,9 @@ MAX_SOURCE_LENGTH = int(os.getenv("MAX_SOURCE_LENGTH", "192"))
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "128"))
 NUM_BEAMS = int(os.getenv("NUM_BEAMS", "2"))
 
-# Routing configuration for small/medium/large models
-SERVICE_MODEL_SIZE = os.getenv("SERVICE_MODEL_SIZE", "large").lower().strip()
-SMALL_API_URL = os.getenv("SMALL_API_URL", "http://akk-api-small:8000")
-MEDIUM_API_URL = os.getenv("MEDIUM_API_URL", "http://akk-api-medium:8000")
-LARGE_API_URL = os.getenv("LARGE_API_URL", "http://akk-api-large:8000")
+# Routing configuration for model sizes (small, medium, large)
+SERVICE_MODEL_VERSION = os.getenv("SERVICE_MODEL_VERSION", "large").lower().strip()
+ACTIVE_VERSIONS = os.getenv("ACTIVE_VERSIONS", "small,medium,large").strip()
 
 # Database Schema Declarations using SQLAlchemy ORM
 Base = declarative_base()
@@ -89,12 +87,12 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Pydantic schemas for request/response serialization and validation
 class TranslateRequest(BaseModel):
     text: str = Field(min_length=1, description="Akkadian text to translate")
-    model_size: str = Field(default="large", description="Model size/variant to use (small, medium, large)")
+    model_version: str = Field(default="v2", description="Model version/tag to use (e.g. v1, v2, v3)")
 
 class TranslateResponse(BaseModel):
     translation: str = Field(description="Generated English translation")
     model_source: str = Field(description="Source of the model loaded (e.g. HuggingFace repo or local path)")
-    model_size: str = Field(default="large", description="The size/variant of the model that served the translation")
+    model_version: str = Field(default="v2", description="The version/tag of the model that served the translation")
 
 class FeedbackRequest(BaseModel):
     source_text: str = Field(min_length=1, description="Original Akkadian text")
@@ -127,17 +125,7 @@ class TranslationService:
         logger = logging.getLogger("translation")
         logger.info("Using model source: %s", model_source)
 
-        # Override NUM_BEAMS based on configured service model size
-        global NUM_BEAMS
-        if SERVICE_MODEL_SIZE == "small":
-            NUM_BEAMS = 1
-            logger.info("Overriding NUM_BEAMS to 1 (small model mode)")
-        elif SERVICE_MODEL_SIZE == "medium":
-            NUM_BEAMS = 2
-            logger.info("Overriding NUM_BEAMS to 2 (medium model mode)")
-        elif SERVICE_MODEL_SIZE == "large":
-            NUM_BEAMS = 5
-            logger.info("Overriding NUM_BEAMS to 5 (large model mode)")
+
 
         # Validate directory content if loading a local fine-tuned model
         if model_source != MODEL_NAME:
@@ -290,7 +278,7 @@ async def lifespan(app: FastAPI):
     """
     global translation_service
     init_db()
-    if SERVICE_MODEL_SIZE == "router":
+    if SERVICE_MODEL_VERSION == "router":
         logging.info("Running in ROUTER mode. No local model will be loaded.")
     else:
         translation_service = TranslationService.load()
@@ -315,7 +303,28 @@ def serve_frontend() -> FileResponse:
 @app.get("/health")
 def health() -> dict[str, str]:
     """Health check endpoint for Kubernetes probes and CI smoke tests."""
+    if SERVICE_MODEL_VERSION == "router":
+        versions = [v.strip().lower() for v in ACTIVE_VERSIONS.split(",") if v.strip()]
+        default_version = versions[-1] if versions else "v2"
+        target_url = os.getenv(f"{default_version.upper()}_API_URL", f"http://akk-api-{default_version}:8000")
+        try:
+            import httpx
+            with httpx.Client(timeout=1.5) as client:
+                resp = client.get(f"{target_url}/health")
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=503, detail=f"Default model version ({default_version}) is loading")
+        except Exception:
+            raise HTTPException(status_code=503, detail="Model services are initializing or offline")
+    else:
+        if translation_service is None:
+            raise HTTPException(status_code=503, detail="Local translation service is loading model weights")
     return {"status": "ok"}
+
+@app.get("/versions")
+def get_versions() -> dict:
+    """Exposes the list of active/configured model versions."""
+    versions = [v.strip().lower() for v in ACTIVE_VERSIONS.split(",") if v.strip()]
+    return {"versions": versions, "default": "large"}
 
 @app.get("/config")
 def config() -> dict[str, str]:
@@ -328,29 +337,24 @@ def config() -> dict[str, str]:
 @app.post("/translate", response_model=TranslateResponse)
 def translate(payload: TranslateRequest) -> TranslateResponse:
     """Translates the input Akkadian string using the active TranslationService or routes it."""
-    requested_size = payload.model_size.lower().strip()
+    requested_version = payload.model_version.lower().strip()
     
-    # If this service is the requested model size, translate locally
-    if SERVICE_MODEL_SIZE == requested_size:
+    # If this service is the requested model version, translate locally
+    if SERVICE_MODEL_VERSION == requested_version:
         service = get_translation_service()
         return TranslateResponse(
             translation=service.translate(payload.text),
             model_source=service.model_source,
-            model_size=SERVICE_MODEL_SIZE
+            model_version=SERVICE_MODEL_VERSION
         )
     
     # Otherwise, forward/route the request to the corresponding internal model service
-    url_map = {
-        "small": SMALL_API_URL,
-        "medium": MEDIUM_API_URL,
-        "large": LARGE_API_URL
-    }
-    target_url = url_map.get(requested_size)
+    target_url = os.getenv(f"{requested_version.upper()}_API_URL", f"http://akk-api-{requested_version}:8000")
     
     if target_url:
         try:
             import httpx
-            logging.info(f"Routing translation request to {requested_size} service at {target_url}")
+            logging.info(f"Routing translation request to version {requested_version} service at {target_url}")
             with httpx.Client(timeout=15.0) as client:
                 resp = client.post(f"{target_url}/translate", json=payload.dict())
                 if resp.status_code == 200:
@@ -358,25 +362,25 @@ def translate(payload: TranslateRequest) -> TranslateResponse:
                     return TranslateResponse(
                         translation=data.get("translation"),
                         model_source=data.get("model_source"),
-                        model_size=data.get("model_size", requested_size)
+                        model_version=data.get("model_version", requested_version)
                     )
                 else:
                     raise HTTPException(status_code=resp.status_code, detail=resp.text)
         except Exception as e:
-            logging.warning(f"Failed to route request to {requested_size} at {target_url}: {e}. Falling back to local model.")
+            logging.warning(f"Failed to route request to {requested_version} at {target_url}: {e}. Falling back to local model.")
             
     # Fallback to local model if available
     if translation_service is not None:
         service = get_translation_service()
         return TranslateResponse(
             translation=service.translate(payload.text),
-            model_source=service.model_source + f" (local fallback from {requested_size})",
-            model_size=SERVICE_MODEL_SIZE
+            model_source=service.model_source + f" (local fallback from {requested_version})",
+            model_version=SERVICE_MODEL_VERSION
         )
     else:
         raise HTTPException(
             status_code=503,
-            detail=f"Model service for '{requested_size}' is unavailable and no local model fallback is loaded (running in router mode)."
+            detail=f"Model service for '{requested_version}' is unavailable and no local model fallback is loaded (running in router mode)."
         )
 
 @app.post("/feedback", response_model=FeedbackResponse)

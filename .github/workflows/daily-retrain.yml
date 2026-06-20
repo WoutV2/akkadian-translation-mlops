@@ -5,6 +5,17 @@ on:
     # Run every day at midnight (UTC)
     - cron: '0 0 * * *'
   workflow_dispatch: # Allow manual triggers for testing
+    inputs:
+      model_size:
+        description: 'Which model size to retrain'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - small
+          - medium
+          - large
 
 jobs:
   check-and-retrain:
@@ -31,7 +42,16 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FAST_TEST_RUN: "1" # Set to 0 to do full training, or 1 for fast-test run
         run: |
-          & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data
+          $size = "${{ github.event.inputs.model_size }}"
+          if ($size -eq "small" -or $size -eq "medium" -or $size -eq "large") {
+              echo "Retraining single custom model: $size"
+              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size $size
+          } else {
+              echo "Retraining all three custom model variants..."
+              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size small
+              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size medium
+              & "$env:LOCAL_PYTHON_PATH" training/train.py --use-azure-data --model-size large
+          }
 
   deploy:
     needs: check-and-retrain
@@ -58,24 +78,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Get Latest Model Version from Azure ML Registry
+      - name: Resolve Model Versions from Azure ML
         run: |
-          # Find the latest registered version of our translation model
-          LATEST_VERSION=$(az ml model list \
-            --name akkadian-translation-model \
-            --resource-group azure-ai \
-            --workspace-name verstraete-wout-ml \
-            --query "[0].version" \
-            --output tsv 2>/dev/null || echo "ERROR")
+          # Fetch the latest registered versions for small, medium, and large variants
+          LATEST_SMALL=$(az ml model list --name akkadian-translation-model-small --resource-group azure-ai --workspace-name verstraete-wout-ml --query "[0].version" --output tsv 2>/dev/null || echo "1")
+          LATEST_MEDIUM=$(az ml model list --name akkadian-translation-model-medium --resource-group azure-ai --workspace-name verstraete-wout-ml --query "[0].version" --output tsv 2>/dev/null || echo "1")
+          LATEST_LARGE=$(az ml model list --name akkadian-translation-model-large --resource-group azure-ai --workspace-name verstraete-wout-ml --query "[0].version" --output tsv 2>/dev/null || echo "1")
           
-          if [ "$LATEST_VERSION" = "ERROR" ] || [ -z "$LATEST_VERSION" ]; then
-            echo "::error:: Model 'akkadian-translation-model' is not registered in the Azure ML workspace 'verstraete-wout-ml' under resource group 'azure-ai'."
-            echo "::error:: Please ensure the model is trained and registered successfully before deploying."
-            exit 1
-          fi
-          
-          echo "Latest model version: $LATEST_VERSION"
-          echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
+          echo "LATEST_SMALL=$LATEST_SMALL" >> $GITHUB_ENV
+          echo "LATEST_MEDIUM=$LATEST_MEDIUM" >> $GITHUB_ENV
+          echo "LATEST_LARGE=$LATEST_LARGE" >> $GITHUB_ENV
 
       - name: Build and Push API Image
         uses: docker/build-push-action@v6
@@ -97,25 +109,28 @@ jobs:
           # Apply database credentials as a Kubernetes secret dynamically
           kubectl create secret generic akk-postgres-secret \
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml | merge=true kubectl apply -f -
 
-          # Apply Azure credentials dynamically for the init container
+          # Apply Azure credentials dynamically for the init containers
           kubectl create secret generic azure-credentials-secret \
             --from-literal=AZURE_CREDENTIALS='${{ secrets.AZURE_CREDENTIALS }}' \
             --dry-run=client -o yaml | kubectl apply -f -
             
-          # Update container image placeholder in manifest to use the lightweight API image
-          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g" infrastructure/k8s/api-deployment.yaml
+          # Replace target versions in manifests
+          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_SMALL }}|g" infrastructure/k8s/api-deployment-small.yaml
+          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_MEDIUM }}|g" infrastructure/k8s/api-deployment-medium.yaml
+          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_LARGE }}|g" infrastructure/k8s/api-deployment-large.yaml
+
+          # Update container image placeholder in manifests to use ACR links
+          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g" infrastructure/k8s/api-deployment*.yaml
           sed -i 's|myregistry/akk-frontend:latest|verstraetewoutmlacr2.azurecr.io/akk-frontend:latest|g' infrastructure/k8s/frontend-deployment.yaml
           
-          # Replace the model version placeholder in the manifest
-          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_VERSION }}|g" infrastructure/k8s/api-deployment.yaml
-
-          # Delete the local statefulset DB manifest and apply AKS manifests
-          rm -f infrastructure/k8s/db-statefulset.yaml
+          # Apply the AKS manifests
           kubectl apply -f infrastructure/k8s/
 
           # Force rolling restart of the deployments to pull the fresh 'latest' images
           kubectl rollout restart deployment/akk-frontend
           kubectl rollout restart deployment/akk-api
-
+          kubectl rollout restart deployment/akk-api-small
+          kubectl rollout restart deployment/akk-api-medium
+          kubectl rollout restart deployment/akk-api-large

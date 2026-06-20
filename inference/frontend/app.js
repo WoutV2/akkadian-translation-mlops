@@ -14,6 +14,35 @@ function setStatus(message) {
   statusBox.textContent = message;
 }
 
+setStatus("Ready.");
+
+async function loadVersions() {
+  try {
+    const response = await fetch("/versions");
+    if (response.ok) {
+      const data = await response.json();
+      const selectEl = document.getElementById("modelSelect");
+      if (selectEl && data.versions) {
+        selectEl.innerHTML = "";
+        data.versions.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v;
+          opt.textContent = `Model Version: ${v.toUpperCase()}`;
+          if (v === data.default) {
+            opt.selected = true;
+          }
+          selectEl.appendChild(opt);
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Failed to load model versions:", error);
+  }
+}
+
+// Load versions on page load
+loadVersions();
+
 translateBtn.addEventListener("click", async () => {
   const text = sourceText.value.trim();
   if (!text) {
@@ -27,23 +56,30 @@ translateBtn.addEventListener("click", async () => {
   feedbackPanel.classList.add("hidden");
 
   try {
-    const modelSizeEl = document.getElementById("modelSize");
-    const model_size = modelSizeEl ? modelSizeEl.value : "large";
+    const modelSelectEl = document.getElementById("modelSelect");
+    const model_version = modelSelectEl ? modelSelectEl.value : "v2";
     const response = await fetch("/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, model_size }),
+      body: JSON.stringify({ text, model_version }),
     });
 
     if (!response.ok) {
-      throw new Error(`Translation failed with status ${response.status}`);
+      let errDetail = `Translation failed with status ${response.status}`;
+      try {
+        const errData = await response.json();
+        if (errData && errData.detail) {
+          errDetail = errData.detail;
+        }
+      } catch (e) {}
+      throw new Error(errDetail);
     }
 
     const data = await response.json();
     lastTranslation = data.translation || "";
     translatedText.textContent = lastTranslation || "No translation returned.";
     incorrectBtn.disabled = false;
-    setStatus(`Translated with ${data.model_source} (Size: ${data.model_size || model_size}).`);
+    setStatus(`Translated with ${data.model_source} (Version: ${data.model_version || model_version}).`);
   } catch (error) {
     translatedText.textContent = "Translation failed.";
     setStatus(error.message);

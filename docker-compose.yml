@@ -8,7 +8,8 @@ services:
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=sqlite:///./feedback.db
-      - SERVICE_MODEL_SIZE=router
+      - SERVICE_MODEL_VERSION=router
+      - ACTIVE_VERSIONS=small,medium,large
       - SMALL_API_URL=http://akk-api-small:8000
       - MEDIUM_API_URL=http://akk-api-medium:8000
       - LARGE_API_URL=http://akk-api-large:8000
@@ -22,40 +23,42 @@ services:
       - akk-api-medium
       - akk-api-large
 
-  # Small model instance (low resource usage, beam=1)
+  # Small model instance (pruned 2-layer custom model)
   akk-api-small:
     build:
       context: ./inference/api
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=sqlite:///./feedback.db
-      - SERVICE_MODEL_SIZE=small
-      - MODEL_DIR=/nonexistent  # Force loading from HF baseline MODEL_NAME
+      - SERVICE_MODEL_VERSION=small
+      - MODEL_DIR=/mbart-finetuned-small
     volumes:
       - ./inference/api:/app
       - ./data:/data
+      - ./mbart-finetuned-small:/mbart-finetuned-small
 
-  # Medium model instance (low resource usage, beam=2)
+  # Medium model instance (pruned 6-layer custom model)
   akk-api-medium:
     build:
       context: ./inference/api
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=sqlite:///./feedback.db
-      - SERVICE_MODEL_SIZE=medium
-      - MODEL_DIR=/nonexistent  # Force loading from HF baseline MODEL_NAME
+      - SERVICE_MODEL_VERSION=medium
+      - MODEL_DIR=/mbart-finetuned-medium
     volumes:
       - ./inference/api:/app
       - ./data:/data
+      - ./mbart-finetuned-medium:/mbart-finetuned-medium
 
-  # Large model instance (fine-tuned model from local dir, beam=5)
+  # Large model instance (Default fine-tuned 12-layer model)
   akk-api-large:
     build:
       context: ./inference/api
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=sqlite:///./feedback.db
-      - SERVICE_MODEL_SIZE=large
+      - SERVICE_MODEL_VERSION=large
       - MODEL_DIR=/mbart-finetuned
     volumes:
       - ./inference/api:/app

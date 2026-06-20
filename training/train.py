@@ -119,6 +119,10 @@ def main(
     max_steps: int | None = None,
     model_size: str = "large",
 ):
+    global OUTPUT_DIR
+    if model_size != "large":
+        OUTPUT_DIR = str(Path(OUTPUT_DIR).parent / f"mbart-finetuned-{model_size}")
+
     train_csv = train_csv or TRAIN_CSV
     val_csv = val_csv or VAL_CSV
     max_steps = max_steps if max_steps is not None else MAX_STEPS
@@ -197,6 +201,20 @@ def main(
     logger.info("Loading model and tokenizer: %s", MODEL_NAME)
     model = MBartForConditionalGeneration.from_pretrained(MODEL_NAME)
     tokenizer = MBart50TokenizerFast.from_pretrained(MODEL_NAME)
+    
+    # Prune model layers to create small/medium variants of your model
+    if model_size == "small":
+        model.model.encoder.layers = model.model.encoder.layers[:2]
+        model.model.decoder.layers = model.model.decoder.layers[:2]
+        model.config.encoder_layers = 2
+        model.config.decoder_layers = 2
+        logger.info("Pruned model layers to 2 encoder / 2 decoder layers (Small size)")
+    elif model_size == "medium":
+        model.model.encoder.layers = model.model.encoder.layers[:6]
+        model.model.decoder.layers = model.model.decoder.layers[:6]
+        model.config.encoder_layers = 6
+        model.config.decoder_layers = 6
+        logger.info("Pruned model layers to 6 encoder / 6 decoder layers (Medium size)")
     tokenizer.src_lang = os.getenv("SRC_LANG", "ar_AR")
     tokenizer.tgt_lang = os.getenv("TGT_LANG", "en_XX")
     

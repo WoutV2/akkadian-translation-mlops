@@ -26,8 +26,10 @@ spec:
             secretKeyRef:
               name: akk-postgres-secret
               key: DATABASE_URL
-        - name: SERVICE_MODEL_SIZE
+        - name: SERVICE_MODEL_VERSION
           value: "router"
+        - name: ACTIVE_VERSIONS
+          value: "small,medium,large"
         - name: SMALL_API_URL
           value: "http://akk-api-small:8000"
         - name: MEDIUM_API_URL

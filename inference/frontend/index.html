@@ -211,16 +211,10 @@
             </div>
           </div>
 
-          <div style="margin-bottom: 16px;">
-            <label for="modelSize">Translation Model Size</label>
-            <select id="modelSize" style="width: 100%; border-radius: 16px; border: 1px solid var(--border); background: rgba(17, 24, 39, 0.9); color: var(--text); padding: 14px 16px; font: inherit; outline: none;">
-              <option value="large" selected>Large (Fine-Tuned, Best Translation)</option>
-              <option value="medium">Medium (Base Model, Normal Beams)</option>
-              <option value="small">Small (Base Model, Fast Beam=1)</option>
-            </select>
-          </div>
-
           <div class="actions">
+            <select id="modelSelect" style="border-radius: 999px; border: 1px solid var(--border); background: rgba(17, 24, 39, 0.9); color: var(--text); padding: 12px 20px; font: inherit; font-weight: 600; outline: none; cursor: pointer; min-width: 200px; flex: 1;">
+              <option value="" disabled selected>Loading models...</option>
+            </select>
             <button id="translateBtn" class="primary">Translate</button>
             <button id="incorrectBtn" class="secondary" disabled>Incorrect</button>
           </div>
