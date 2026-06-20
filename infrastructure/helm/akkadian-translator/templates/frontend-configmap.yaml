@@ -1,0 +1,11 @@
+{{-/* ConfigMap containing the nginx configuration for the frontend */-}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "akkadian-translator.fullname" . }}-frontend-config
+  labels:
+    {{- include "akkadian-translator.labels" . | nindent 4 }}
+
+data:
+  default.conf: |
+    {{- .Files.Get "inference/frontend/nginx.conf" | nindent 4 }}
