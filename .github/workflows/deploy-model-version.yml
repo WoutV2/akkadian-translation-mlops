@@ -46,26 +46,43 @@ jobs:
         run: |
           az aks get-credentials --resource-group azure-ai --name akk-aks-cluster --overwrite-existing
 
-      - name: Resolve Model Version from Azure ML
+      - name: Resolve Model Versions from Azure ML
         run: |
+          # 1. Fetch latest registered versions for small, medium, and large
+          LATEST_SMALL=$(az ml model list --name akkadian-translation-model-small --resource-group azure-ai --workspace-name verstraete-wout-ml --query "[0].version" --output tsv 2>/dev/null || echo "1")
+          LATEST_MEDIUM=$(az ml model list --name akkadian-translation-model-medium --resource-group azure-ai --workspace-name verstraete-wout-ml --query "[0].version" --output tsv 2>/dev/null || echo "1")
+          LATEST_LARGE=$(az ml model list --name akkadian-translation-model-large --resource-group azure-ai --workspace-name verstraete-wout-ml --query "[0].version" --output tsv 2>/dev/null || echo "1")
+
+          # 2. Get user specified version for target model size
           if [ "${{ github.event.inputs.azure_model_version }}" = "latest" ]; then
-            LATEST_VERSION=$(az ml model list \
+            TARGET_VERSION=$(az ml model list \
               --name akkadian-translation-model-${{ github.event.inputs.model_version }} \
               --resource-group azure-ai \
               --workspace-name verstraete-wout-ml \
               --query "[0].version" \
               --output tsv 2>/dev/null || echo "ERROR")
-            if [ "$LATEST_VERSION" = "ERROR" ] || [ -z "$LATEST_VERSION" ]; then
+            if [ "$TARGET_VERSION" = "ERROR" ] || [ -z "$TARGET_VERSION" ]; then
               echo "::error:: Could not retrieve latest model version."
               exit 1
             fi
-            echo "Resolved latest model version: $LATEST_VERSION"
-            echo "MODEL_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
           else
-            echo "MODEL_VERSION=${{ github.event.inputs.azure_model_version }}" >> $GITHUB_ENV
+            TARGET_VERSION="${{ github.event.inputs.azure_model_version }}"
           fi
 
-      - name: Prepare Manifests
+          # 3. Override target version in appropriate variable
+          if [ "${{ github.event.inputs.model_version }}" = "small" ]; then
+            LATEST_SMALL=$TARGET_VERSION
+          elif [ "${{ github.event.inputs.model_version }}" = "medium" ]; then
+            LATEST_MEDIUM=$TARGET_VERSION
+          elif [ "${{ github.event.inputs.model_version }}" = "large" ]; then
+            LATEST_LARGE=$TARGET_VERSION
+          fi
+
+          echo "LATEST_SMALL=$LATEST_SMALL" >> $GITHUB_ENV
+          echo "LATEST_MEDIUM=$LATEST_MEDIUM" >> $GITHUB_ENV
+          echo "LATEST_LARGE=$LATEST_LARGE" >> $GITHUB_ENV
+
+      - name: Deploy to AKS
         run: |
           # Apply database credentials as a Kubernetes secret dynamically
           kubectl create secret generic akk-postgres-secret \
@@ -76,23 +93,19 @@ jobs:
           kubectl create secret generic azure-credentials-secret \
             --from-literal=AZURE_CREDENTIALS='${{ secrets.AZURE_CREDENTIALS }}' \
             --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Inject resolved model version into target manifest
-          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.MODEL_VERSION }}|g" infrastructure/k8s/api-deployment-${{ github.event.inputs.model_version }}.yaml
 
-          # Replace registry placeholder in target manifest
-          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g" infrastructure/k8s/api-deployment-${{ github.event.inputs.model_version }}.yaml
+          # Deploy using Helm
+          helm upgrade --install akkadian-translator infrastructure/helm/akkadian-translator \
+            --set global.registry=verstraetewoutmlacr2.azurecr.io \
+            --set models.small.version=${{ env.LATEST_SMALL }} \
+            --set models.medium.version=${{ env.LATEST_MEDIUM }} \
+            --set models.large.version=${{ env.LATEST_LARGE }}
 
-      - name: Apply Deployments
-        run: |
-          echo "Applying Kubernetes manifest for ${{ github.event.inputs.model_version }}..."
-          kubectl apply -f infrastructure/k8s/api-deployment-${{ github.event.inputs.model_version }}.yaml
-          
           # Wait for target rollout to complete
-          echo "Waiting for rollout of akk-api-${{ github.event.inputs.model_version }}..."
-          if ! kubectl rollout status deployment/akk-api-${{ github.event.inputs.model_version }} --timeout=300s; then
+          echo "Waiting for rollout of akkadian-translator-api-${{ github.event.inputs.model_version }}..."
+          if ! kubectl rollout status deployment/akkadian-translator-api-${{ github.event.inputs.model_version }} --timeout=300s; then
             echo "::error:: Rollout failed or timed out. Triggering rollback..."
-            kubectl rollout undo deployment/akk-api-${{ github.event.inputs.model_version }}
+            kubectl rollout undo deployment/akkadian-translator-api-${{ github.event.inputs.model_version }}
             exit 1
           fi
 
@@ -102,13 +115,13 @@ jobs:
           
           # Query the health endpoint of the deployed service variant
           POD_NAME="smoke-test-run-${{ github.event.inputs.model_version }}"
-          kubectl run $POD_NAME --image=curlimages/curl --restart=Never --overrides='{ "spec": { "activeDeadlineSeconds": 60 } }' --command -- curl -s -f http://akk-api-${{ github.event.inputs.model_version }}:8000/health
+          kubectl run $POD_NAME --image=curlimages/curl --restart=Never --overrides='{ "spec": { "activeDeadlineSeconds": 60 } }' --command -- curl -s -f http://akkadian-translator-api-${{ github.event.inputs.model_version }}:8000/health
           
           # Wait for the smoke test container to exit
           if ! kubectl wait --for=condition=Completed pod/$POD_NAME --timeout=60s; then
             echo "::error:: Smoke test timed out."
             kubectl delete pod $POD_NAME --grace-period=0 --force
-            kubectl rollout undo deployment/akk-api-${{ github.event.inputs.model_version }}
+            kubectl rollout undo deployment/akkadian-translator-api-${{ github.event.inputs.model_version }}
             exit 1
           fi
           
@@ -118,7 +131,7 @@ jobs:
           
           if [ "$EXIT_CODE" != "0" ]; then
             echo "::error:: Smoke test failed with exit code $EXIT_CODE. Rolling back deployment..."
-            kubectl rollout undo deployment/akk-api-${{ github.event.inputs.model_version }}
+            kubectl rollout undo deployment/akkadian-translator-api-${{ github.event.inputs.model_version }}
             exit 1
           else
             echo "Smoke test passed successfully!"

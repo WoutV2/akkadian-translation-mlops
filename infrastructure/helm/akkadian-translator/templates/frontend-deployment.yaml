@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "akkadian-translator.fullname" . }}-frontend
+  labels:
+    {{- include "akkadian-translator.labels" . | nindent 4 }}
+    component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      {{- include "akkadian-translator.selectorLabels" . | nindent 6 }}
+      component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "akkadian-translator.selectorLabels" . | nindent 8 }}
+        component: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: "{{ .Values.global.registry }}/{{ .Values.frontend.image }}:{{ .Values.frontend.tag }}"
+        imagePullPolicy: {{ .Values.frontend.imagePullPolicy }}
+        ports:
+        - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "akkadian-translator.fullname" . }}-frontend
+  labels:
+    {{- include "akkadian-translator.labels" . | nindent 4 }}
+    component: frontend
+spec:
+  selector:
+    {{- include "akkadian-translator.selectorLabels" . | nindent 4 }}
+    component: frontend
+  ports:
+    - protocol: TCP
+      port: {{ .Values.frontend.service.port }}
+      targetPort: 80
+  type: {{ .Values.frontend.service.type }}

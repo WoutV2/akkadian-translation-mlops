@@ -82,22 +82,16 @@ jobs:
             --from-literal=AZURE_CREDENTIALS='${{ secrets.AZURE_CREDENTIALS }}' \
             --dry-run=client -o yaml | kubectl apply -f -
             
-          # Update container image placeholder in manifest to use the lightweight API image
-          sed -i "s|myregistry/akk-api:latest|verstraetewoutmlacr2.azurecr.io/akk-api:latest|g" infrastructure/k8s/api-deployment*.yaml
-          sed -i 's|myregistry/akk-frontend:latest|verstraetewoutmlacr2.azurecr.io/akk-frontend:latest|g' infrastructure/k8s/frontend-deployment.yaml
-          
-          # Replace the model version placeholders in the manifests
-          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_SMALL }}|g" infrastructure/k8s/api-deployment-small.yaml
-          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_MEDIUM }}|g" infrastructure/k8s/api-deployment-medium.yaml
-          sed -i "s|MODEL_VERSION_PLACEHOLDER|${{ env.LATEST_LARGE }}|g" infrastructure/k8s/api-deployment-large.yaml
-
-          # Delete the local statefulset DB manifest and apply AKS manifests
-          rm -f infrastructure/k8s/db-statefulset.yaml
-          kubectl apply -f infrastructure/k8s/
+          # Deploy using Helm
+          helm upgrade --install akkadian-translator infrastructure/helm/akkadian-translator \
+            --set global.registry=verstraetewoutmlacr2.azurecr.io \
+            --set models.small.version=${{ env.LATEST_SMALL }} \
+            --set models.medium.version=${{ env.LATEST_MEDIUM }} \
+            --set models.large.version=${{ env.LATEST_LARGE }}
 
           # Force rolling restart of the deployments to pull the fresh 'latest' images
-          kubectl rollout restart deployment/akk-frontend
-          kubectl rollout restart deployment/akk-api
-          kubectl rollout restart deployment/akk-api-small
-          kubectl rollout restart deployment/akk-api-medium
-          kubectl rollout restart deployment/akk-api-large
+          kubectl rollout restart deployment/akkadian-translator-frontend
+          kubectl rollout restart deployment/akkadian-translator-api-router
+          kubectl rollout restart deployment/akkadian-translator-api-small
+          kubectl rollout restart deployment/akkadian-translator-api-medium
+          kubectl rollout restart deployment/akkadian-translator-api-large

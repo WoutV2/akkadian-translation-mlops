@@ -1,0 +1,116 @@
+{{- range $name, $config := .Values.models }}
+{{- if $config.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "akkadian-translator.fullname" $ }}-api-{{ $name }}
+  labels:
+    {{- include "akkadian-translator.labels" $ | nindent 4 }}
+    component: api-{{ $name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "akkadian-translator.selectorLabels" $ | nindent 6 }}
+      component: api-{{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "akkadian-translator.selectorLabels" $ | nindent 8 }}
+        component: api-{{ $name }}
+    spec:
+      initContainers:
+      - name: model-downloader
+        image: mcr.microsoft.com/azure-cli:2.61.0
+        env:
+        - name: AZURE_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.secrets.azureCredentialsSecretName }}
+              key: AZURE_CREDENTIALS
+        - name: MODEL_VERSION
+          value: {{ $config.version | quote }}
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -e
+          echo "Parsing credentials..."
+          CLIENT_ID=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['clientId'])")
+          CLIENT_SECRET=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['clientSecret'])")
+          TENANT_ID=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['tenantId'])")
+          SUBSCRIPTION_ID=$(echo "$AZURE_CREDENTIALS" | python3 -c "import sys, json; print(json.load(sys.stdin)['subscriptionId'])")
+
+          echo "Logging in to Azure..."
+          az login --service-principal -u "$CLIENT_ID" -p "$CLIENT_SECRET" --tenant "$TENANT_ID" > /dev/null
+          az account set --subscription "$SUBSCRIPTION_ID"
+
+          echo "Installing Azure ML CLI Extension..."
+          az extension add --name ml --yes
+
+          echo "Downloading {{ $name }} model version $MODEL_VERSION..."
+          az ml model download \
+            --name akkadian-translation-model-{{ $name }} \
+            --version "$MODEL_VERSION" \
+            --resource-group azure-ai \
+            --workspace-name verstraete-wout-ml \
+            --download-path /tmp/downloaded_model
+
+          echo "Preparing shared volume..."
+          mkdir -p /model-dir
+          if [ -d "/tmp/downloaded_model/akkadian-translation-model-{{ $name }}/clean_registration" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model-{{ $name }}/clean_registration/* /model-dir/
+          elif [ -d "/tmp/downloaded_model/akkadian-translation-model-{{ $name }}/mbart-finetuned-{{ $name }}" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model-{{ $name }}/mbart-finetuned-{{ $name }}/* /model-dir/
+          else
+            cp -r /tmp/downloaded_model/akkadian-translation-model-{{ $name }}/* /model-dir/
+          fi
+          echo "Done downloading model weights."
+        volumeMounts:
+        - name: model-volume
+          mountPath: /model-dir
+      containers:
+      - name: api
+        image: "{{ $.Values.global.registry }}/{{ $.Values.api.image }}:{{ $.Values.api.tag }}"
+        imagePullPolicy: {{ $.Values.api.imagePullPolicy }}
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.secrets.postgresSecretName }}
+              key: DATABASE_URL
+        - name: SERVICE_MODEL_VERSION
+          value: {{ $name | quote }}
+        - name: MODEL_DIR
+          value: "/app/mbart-finetuned-{{ $name }}"
+        resources:
+          {{- toYaml $config.resources | nindent 10 }}
+        volumeMounts:
+        - name: model-volume
+          mountPath: /app/mbart-finetuned-{{ $name }}
+      volumes:
+      - name: model-volume
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "akkadian-translator.fullname" $ }}-api-{{ $name }}
+  labels:
+    {{- include "akkadian-translator.labels" $ | nindent 4 }}
+    component: api-{{ $name }}
+spec:
+  selector:
+    {{- include "akkadian-translator.selectorLabels" $ | nindent 4 }}
+    component: api-{{ $name }}
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+{{- end }}
+{{- end }}

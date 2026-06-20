@@ -1,0 +1,29 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "akkadian-translator.fullname" . }}-ingress
+  labels:
+    {{- include "akkadian-translator.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+  {{- range .Values.ingress.hosts }}
+  - {{ if .host }}host: {{ .host | quote }}{{ end }}
+    http:
+      paths:
+      {{- range .paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType }}
+        backend:
+          service:
+            name: {{ if or (eq .path "/translate") (eq .path "/feedback") }}{{ include "akkadian-translator.fullname" $ }}-api{{ else }}{{ include "akkadian-translator.fullname" $ }}-frontend{{ end }}
+            port:
+              number: {{ if or (eq .path "/translate") (eq .path "/feedback") }}8000{{ else }}80{{ end }}
+      {{- end }}
+  {{- end }}
+{{- end }}

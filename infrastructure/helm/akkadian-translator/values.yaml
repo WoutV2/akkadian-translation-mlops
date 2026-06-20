@@ -1,0 +1,87 @@
+# Default values for akkadian-translator.
+# This is a YAML-formatted file.
+
+# Global registry configuration
+global:
+  registry: verstraetewoutmlacr2.azurecr.io
+
+# Secrets names (assumed pre-created by default, or populated dynamically)
+secrets:
+  postgresSecretName: akk-postgres-secret
+  azureCredentialsSecretName: azure-credentials-secret
+
+# Frontend component configuration
+frontend:
+  image: akk-frontend
+  tag: latest
+  imagePullPolicy: Always
+  replicas: 1
+  service:
+    port: 80
+    type: ClusterIP
+
+# API Router component configuration
+api:
+  image: akk-api
+  tag: latest
+  imagePullPolicy: Always
+  replicas: 1
+  service:
+    port: 8000
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+
+# Model variant configurations (dynamic parallel deployments)
+models:
+  small:
+    enabled: true
+    version: "1"
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "1.5Gi"
+      limits:
+        cpu: "500m"
+        memory: "2Gi"
+  medium:
+    enabled: true
+    version: "1"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2Gi"
+      limits:
+        cpu: "1"
+        memory: "3Gi"
+  large:
+    enabled: true
+    version: "1"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2.5Gi"
+      limits:
+        cpu: "1.5"
+        memory: "4Gi"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: ""  # Empty for wildcard IP / default hostname routing
+      paths:
+        - path: /translate
+          pathType: Exact
+        - path: /feedback
+          pathType: Prefix
+        - path: /
+          pathType: Prefix
