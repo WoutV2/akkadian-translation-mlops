@@ -41,6 +41,12 @@ jobs:
         run: |
           pip install pandas sqlalchemy psycopg2-binary "numpy<2"
 
+      - name: Initialize Database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python training/initialize_db.py
+
       - name: Ingest feedback corrections
         id: ingest_step
         env:

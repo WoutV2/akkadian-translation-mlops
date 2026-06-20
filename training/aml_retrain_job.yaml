@@ -2,7 +2,7 @@ $schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
 type: command
 code: .
 command: >-
-  pip install "numpy<2" "pyarrow<15.0.0" accelerate &&
+  pip install "numpy<2" "pyarrow<15.0.0" accelerate protobuf &&
   python train.py
   --train-csv ${{inputs.train_csv}}
   --val-csv ${{inputs.val_csv}}
