@@ -16,6 +16,11 @@ on:
           - small
           - medium
           - large
+      force_retrain:
+        description: 'Force retraining even if there are no new corrections'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   check-and-retrain:
@@ -33,7 +38,11 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          & "$env:LOCAL_PYTHON_PATH" training/ingest_feedback.py
+          $force_flag = ""
+          if ("${{ inputs.force_retrain }}" -eq "true") {
+              $force_flag = "--force"
+          }
+          & "$env:LOCAL_PYTHON_PATH" training/ingest_feedback.py $force_flag
 
       - name: Local GPU Retraining
         if: steps.ingest_step.outputs.has_changes == 'true'

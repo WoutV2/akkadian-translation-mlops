@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from inference.api.app import FeedbackCorrection, TrainData, ValidationData, TestData
 
-def main():
+def main(force: bool = False):
     """
     Main feedback ingestion entrypoint. Fetches unhandled user-submitted feedback,
     moves it to the training dataset table, updates the handled flag in the DB,
@@ -31,7 +31,9 @@ def main():
         unhandled = session.query(FeedbackCorrection).filter_by(handled=0).all()
         if not unhandled:
             print("No new feedback to ingest.")
-            has_changes = False
+            has_changes = force
+            if force:
+                print("Forcing has_changes to True.")
         else:
             print(f"Found {len(unhandled)} unhandled feedback corrections.")
             
@@ -142,4 +144,8 @@ def register_azure_datasets(project_dir):
         print(f"Error during Azure ML dataset registration: {e}")
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--force", action="store_true", help="Force has_changes to true even if no new feedback is found")
+    args = parser.parse_args()
+    main(force=args.force)
