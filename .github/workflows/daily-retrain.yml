@@ -94,7 +94,10 @@ jobs:
               
             echo "Successfully submitted job: $JOB_NAME"
             echo "Streaming logs for $JOB_NAME..."
-            az ml job show --name $JOB_NAME --web --stream -g azure-ai -w verstraete-wout-ml
+            # Print browser portal URL to Actions logs
+            az ml job show --name $JOB_NAME --web -g azure-ai -w verstraete-wout-ml
+            # Stream logs to terminal and wait for completion
+            az ml job stream --name $JOB_NAME -g azure-ai -w verstraete-wout-ml
             
             # Check job final status
             STATUS=$(az ml job show --name $JOB_NAME --query status --output tsv -g azure-ai -w verstraete-wout-ml)

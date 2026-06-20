@@ -37,7 +37,7 @@ MAX_TRAIN_SAMPLES = int(os.getenv("MAX_TRAIN_SAMPLES", "1200" if FAST_TEST_RUN e
 MAX_VAL_SAMPLES = int(os.getenv("MAX_VAL_SAMPLES", "200" if FAST_TEST_RUN else "-1"))
 NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "1" if FAST_TEST_RUN else "5"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "2"))
-MAX_STEPS = int(os.getenv("MAX_STEPS", "200"))
+MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
 
 
 def load_csv(path: str, max_rows: int | None = None) -> pd.DataFrame:
