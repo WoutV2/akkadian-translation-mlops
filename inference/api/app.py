@@ -38,7 +38,10 @@ SERVICE_MODEL_VERSION = os.getenv("SERVICE_MODEL_VERSION", "large").lower().stri
 ACTIVE_VERSIONS = os.getenv("ACTIVE_VERSIONS", "small,medium,large").strip()
 
 # Database Schema Declarations imported from models.py
-from inference.api.models import Base, TrainData, ValidationData, TestData, FeedbackCorrection
+try:
+    from inference.api.models import Base, TrainData, ValidationData, TestData, FeedbackCorrection
+except ModuleNotFoundError:
+    from models import Base, TrainData, ValidationData, TestData, FeedbackCorrection
 
 # Setup SQLAlchemy engine and thread-safe session factories
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
