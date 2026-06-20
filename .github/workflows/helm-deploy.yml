@@ -1,0 +1,31 @@
+name: Deploy AKKadian Translator
+on:
+  push:
+    branches: [ main ]
+jobs:
+  helm-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Azure CLI
+        uses: azure/cli@v1
+        with:
+          azcliversion: 2.86.0
+      - name: Log in to Azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+      - name: Set AKS credentials
+        env:
+          AKS_RESOURCE_GROUP: ${{ secrets.AKS_RESOURCE_GROUP }}
+          AKS_CLUSTER_NAME: ${{ secrets.AKS_CLUSTER_NAME }}
+        run: |
+          az aks get-credentials --resource-group $AKS_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
+      - name: Helm upgrade
+        env:
+          KUBECONFIG: $HOME/.kube/config
+        run: |
+          helm upgrade --install akkadian-translator infrastructure/helm/akkadian-translator --namespace default
