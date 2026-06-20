@@ -237,6 +237,12 @@ def main(
     train_tok = train_ds.map(preprocess, batched=True)
     val_tok = val_ds.map(preprocess, batched=True)
 
+    # Free up memory from raw datasets before starting the training loop
+    del train_ds
+    del val_ds
+    import gc
+    gc.collect()
+
     data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, label_pad_token_id=-100)
 
     # Setup training configurations (epochs, batch sizes, steps)
@@ -246,14 +252,14 @@ def main(
         per_device_eval_batch_size=BATCH_SIZE,
         num_train_epochs=NUM_EPOCHS,
         max_steps=max_steps,
-        logging_steps=50,
+        logging_steps=5,
         save_total_limit=1,
-        eval_strategy="steps",
-        eval_steps=200,
-        save_strategy="steps",
-        save_steps=200,
+        eval_strategy="no",
+        save_strategy="no",
         predict_with_generate=False,
         fp16=torch.cuda.is_available(),
+        optim="adafactor",
+        gradient_checkpointing=True,
     )
 
     # Instantiate the standard HuggingFace Seq2SeqTrainer
