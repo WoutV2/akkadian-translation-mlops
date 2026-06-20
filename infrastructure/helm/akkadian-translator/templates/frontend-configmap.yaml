@@ -1,4 +1,4 @@
-{{-/* ConfigMap containing the nginx configuration for the frontend */-}}
+{{/* ConfigMap for frontend */}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
