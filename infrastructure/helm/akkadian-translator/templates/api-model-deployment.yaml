@@ -83,7 +83,7 @@ spec:
             memory: "256Mi"
           limits:
             cpu: "1.5"
-            memory: "2.5Gi"
+            memory: {{ if eq $name "large" }}"4.5Gi"{{ else }}"2.5Gi"{{ end }}
       containers:
       - name: api
         image: "{{ $.Values.global.registry }}/{{ $.Values.api.image }}:{{ $.Values.api.tag }}"
