@@ -90,8 +90,8 @@ jobs:
             --set models.large.version=${{ env.LATEST_LARGE }}
 
           # Force rolling restart of the deployments to pull the fresh 'latest' images
-          kubectl rollout restart deployment/akkadian-translator-frontend
-          kubectl rollout restart deployment/akkadian-translator-api-router
-          kubectl rollout restart deployment/akkadian-translator-api-small
-          kubectl rollout restart deployment/akkadian-translator-api-medium
-          kubectl rollout restart deployment/akkadian-translator-api-large
+          kubectl rollout restart deployment/akkadian-translator-frontend || true
+          kubectl rollout restart deployment/akkadian-translator-api-router || true
+          kubectl rollout restart deployment/akkadian-translator-api-small || true
+          kubectl rollout restart deployment/akkadian-translator-api-medium || true
+          kubectl rollout restart deployment/akkadian-translator-api-large || true
