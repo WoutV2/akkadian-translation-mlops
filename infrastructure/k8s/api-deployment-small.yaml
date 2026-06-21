@@ -42,9 +42,9 @@ spec:
           echo "Installing Azure ML CLI Extension..."
           az extension add --name ml --yes
 
-          echo "Downloading small model version $MODEL_VERSION..."
+          echo "Downloading large model version $MODEL_VERSION..."
           az ml model download \
-            --name akkadian-translation-model-small \
+            --name akkadian-translation-model-large \
             --version "$MODEL_VERSION" \
             --resource-group azure-ai \
             --workspace-name verstraete-wout-ml \
@@ -52,12 +52,12 @@ spec:
 
           echo "Preparing shared volume..."
           mkdir -p /model-dir
-          if [ -d "/tmp/downloaded_model/akkadian-translation-model-small/clean_registration" ]; then
-            cp -r /tmp/downloaded_model/akkadian-translation-model-small/clean_registration/* /model-dir/
-          elif [ -d "/tmp/downloaded_model/akkadian-translation-model-small/mbart-finetuned-small" ]; then
-            cp -r /tmp/downloaded_model/akkadian-translation-model-small/mbart-finetuned-small/* /model-dir/
+          if [ -d "/tmp/downloaded_model/akkadian-translation-model-large/clean_registration" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model-large/clean_registration/* /model-dir/
+          elif [ -d "/tmp/downloaded_model/akkadian-translation-model-large/mbart-finetuned-large" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model-large/mbart-finetuned-large/* /model-dir/
           else
-            cp -r /tmp/downloaded_model/akkadian-translation-model-small/* /model-dir/
+            cp -r /tmp/downloaded_model/akkadian-translation-model-large/* /model-dir/
           fi
           echo "Done downloading model weights."
         volumeMounts:
@@ -69,7 +69,7 @@ spec:
             memory: "256Mi"
           limits:
             cpu: "1.5"
-            memory: "2.5Gi"
+            memory: "4.5Gi"
       containers:
       - name: api
         image: myregistry/akk-api:latest
@@ -88,7 +88,7 @@ spec:
           value: "/app/mbart-finetuned-small"
         resources:
           requests:
-            cpu: "250m"
+            cpu: "50m"
             memory: "1.5Gi"
           limits:
             cpu: "1.5"

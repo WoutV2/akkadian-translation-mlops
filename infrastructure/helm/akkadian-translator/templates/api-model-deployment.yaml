@@ -53,9 +53,16 @@ spec:
           echo "Installing Azure ML CLI Extension..."
           az extension add --name ml --yes
 
-          echo "Downloading {{ $name }} model version $MODEL_VERSION..."
+          # Use the large model weights for the small variant so it has full translation capabilities,
+          # but run it with greedy decoding (num_beams=1) to keep it fast.
+          DOWNLOAD_MODEL_NAME="{{ $name }}"
+          if [ "$DOWNLOAD_MODEL_NAME" = "small" ]; then
+            DOWNLOAD_MODEL_NAME="large"
+          fi
+
+          echo "Downloading $DOWNLOAD_MODEL_NAME model version $MODEL_VERSION..."
           az ml model download \
-            --name akkadian-translation-model-{{ $name }} \
+            --name akkadian-translation-model-$DOWNLOAD_MODEL_NAME \
             --version "$MODEL_VERSION" \
             --resource-group azure-ai \
             --workspace-name verstraete-wout-ml \
@@ -63,12 +70,12 @@ spec:
 
           echo "Preparing shared volume..."
           mkdir -p /model-dir
-          if [ -d "/tmp/downloaded_model/akkadian-translation-model-{{ $name }}/clean_registration" ]; then
-            cp -r /tmp/downloaded_model/akkadian-translation-model-{{ $name }}/clean_registration/* /model-dir/
-          elif [ -d "/tmp/downloaded_model/akkadian-translation-model-{{ $name }}/mbart-finetuned-{{ $name }}" ]; then
-            cp -r /tmp/downloaded_model/akkadian-translation-model-{{ $name }}/mbart-finetuned-{{ $name }}/* /model-dir/
+          if [ -d "/tmp/downloaded_model/akkadian-translation-model-$DOWNLOAD_MODEL_NAME/clean_registration" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model-$DOWNLOAD_MODEL_NAME/clean_registration/* /model-dir/
+          elif [ -d "/tmp/downloaded_model/akkadian-translation-model-$DOWNLOAD_MODEL_NAME/mbart-finetuned-$DOWNLOAD_MODEL_NAME" ]; then
+            cp -r /tmp/downloaded_model/akkadian-translation-model-$DOWNLOAD_MODEL_NAME/mbart-finetuned-$DOWNLOAD_MODEL_NAME/* /model-dir/
           else
-            cp -r /tmp/downloaded_model/akkadian-translation-model-{{ $name }}/* /model-dir/
+            cp -r /tmp/downloaded_model/akkadian-translation-model-$DOWNLOAD_MODEL_NAME/* /model-dir/
           fi
           echo "Done downloading model weights."
         volumeMounts:
@@ -80,7 +87,7 @@ spec:
             memory: "256Mi"
           limits:
             cpu: "1.5"
-            memory: {{ if eq $name "large" }}"4.5Gi"{{ else }}"2.5Gi"{{ end }}
+            memory: {{ if or (eq $name "large") (eq $name "small") }}"4.5Gi"{{ else }}"2.5Gi"{{ end }}
       containers:
       - name: api
         image: "{{ $.Values.global.registry }}/{{ $.Values.api.image }}:{{ $.Values.api.tag }}"
