@@ -31,7 +31,7 @@ api:
     type: ClusterIP
   resources:
     requests:
-      cpu: "100m"
+      cpu: "50m"
       memory: "256Mi"
     limits:
       cpu: "300m"
@@ -44,17 +44,17 @@ models:
     version: "1"
     resources:
       requests:
-        cpu: "100m"
+        cpu: "50m"
         memory: "512Mi"
       limits:
         cpu: "500m"
-        memory: "1Gi"
+        memory: "1.5Gi"
   medium:
     enabled: true
     version: "1"
     resources:
       requests:
-        cpu: "200m"
+        cpu: "50m"
         memory: "768Mi"
       limits:
         cpu: "1"
@@ -64,7 +64,7 @@ models:
     version: "1"
     resources:
       requests:
-        cpu: "200m"
+        cpu: "50m"
         memory: "1024Mi"
       limits:
         cpu: "1.5"
