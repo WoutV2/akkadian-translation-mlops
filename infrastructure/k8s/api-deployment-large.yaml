@@ -63,6 +63,13 @@ spec:
         volumeMounts:
         - name: model-volume
           mountPath: /model-dir
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "1.5"
+            memory: "2.5Gi"
       containers:
       - name: api
         image: myregistry/akk-api:latest
