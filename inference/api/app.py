@@ -209,26 +209,33 @@ class TranslationService:
         """
         Executes tokenizer encoding, model generation, and decoding.
         Includes a repetition penalty and prevents repeating n-grams to stabilize output.
+
+        For the small model running on a CPU-throttled pod, greedy decoding
+        (num_beams=1) is used to avoid 504 gateway timeouts caused by beam search
+        being too slow under a low CPU limit.
         """
-        # Limit max new tokens for the small variant to avoid long CPU generation loops
-        max_tokens = MAX_NEW_TOKENS
-        if SERVICE_MODEL_VERSION == "small":
-            max_tokens = min(max_tokens, 15)
+        is_small = SERVICE_MODEL_VERSION == "small"
+
+        # Cap tokens and use greedy decoding for the small variant to stay within timeout
+        max_tokens = min(MAX_NEW_TOKENS, 32) if is_small else MAX_NEW_TOKENS
+        num_beams = 1 if is_small else NUM_BEAMS
 
         with self.lock:
             encoded = self.tokenizer(text, return_tensors="pt", max_length=MAX_SOURCE_LENGTH, truncation=True)
             if torch.cuda.is_available():
                 encoded = {k: v.to("cuda") for k, v in encoded.items()}
             with torch.no_grad():
-                generated_tokens = self.model.generate(
-                    **encoded,
+                generate_kwargs = dict(
                     max_new_tokens=max_tokens,
-                    num_beams=NUM_BEAMS,
-                    repetition_penalty=2.0,
-                    no_repeat_ngram_size=3,
+                    num_beams=num_beams,
                     decoder_start_token_id=self.model.config.decoder_start_token_id,
                     forced_bos_token_id=self.model.config.forced_bos_token_id,
                 )
+                # Repetition penalty + no-repeat n-gram only make sense with beam search
+                if num_beams > 1:
+                    generate_kwargs["repetition_penalty"] = 2.0
+                    generate_kwargs["no_repeat_ngram_size"] = 3
+                generated_tokens = self.model.generate(**encoded, **generate_kwargs)
             translation = self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
             return translation
 
