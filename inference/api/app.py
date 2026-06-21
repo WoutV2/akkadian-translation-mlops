@@ -318,7 +318,7 @@ def translate(payload: TranslateRequest) -> TranslateResponse:
         try:
             import httpx
             logging.info(f"Routing translation request to version {requested_version} service at {target_url}")
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=60.0) as client:
                 resp = client.post(f"{target_url}/translate", json=payload.dict())
                 if resp.status_code == 200:
                     data = resp.json()
