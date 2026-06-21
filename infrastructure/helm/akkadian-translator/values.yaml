@@ -47,7 +47,7 @@ models:
         cpu: "250m"
         memory: "512Mi"
       limits:
-        cpu: "1"
+        cpu: "1.5"
         memory: "1.5Gi"
   medium:
     enabled: false
@@ -74,7 +74,10 @@ models:
 ingress:
   enabled: true
   className: nginx
-  annotations: {}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
     # kubernetes.io/ingress.class: nginx
   hosts:
     - host: ""  # Empty for wildcard IP / default hostname routing

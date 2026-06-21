@@ -337,7 +337,9 @@ def translate(payload: TranslateRequest) -> TranslateResponse:
         try:
             import httpx
             logging.info(f"Routing translation request to version {requested_version} service at {target_url}")
-            with httpx.Client(timeout=60.0) as client:
+            # 90s gives the small CPU pod (greedy, 32 tokens, 1 core) enough headroom.
+            # Large model gets the same budget; it's faster on more CPU anyway.
+            with httpx.Client(timeout=90.0) as client:
                 resp = client.post(f"{target_url}/translate", json=payload.dict())
                 if resp.status_code == 200:
                     data = resp.json()
@@ -347,10 +349,13 @@ def translate(payload: TranslateRequest) -> TranslateResponse:
                         model_version=data.get("model_version", requested_version)
                     )
                 else:
+                    # Surface the real error from the model pod instead of swallowing it
                     raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        except HTTPException:
+            raise  # Re-raise HTTP errors — don't fall through to the local fallback
         except Exception as e:
             logging.warning(f"Failed to route request to {requested_version} at {target_url}: {e}. Falling back to local model.")
-            
+
     # Fallback to local model if available
     if translation_service is not None:
         service = get_translation_service()
