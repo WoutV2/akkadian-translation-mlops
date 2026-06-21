@@ -196,6 +196,9 @@ class TranslationService:
         model.eval()
         if torch.cuda.is_available():
             model.to("cuda")
+        else:
+            torch.set_num_threads(1)
+            logger.info("Setting PyTorch CPU thread count to 1 for optimized container inference")
 
         return cls(model_source=model_source, model=model, tokenizer=tokenizer)
 

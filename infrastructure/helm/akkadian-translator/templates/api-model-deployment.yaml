@@ -38,9 +38,6 @@ spec:
           if [ "{{ $name }}" = "medium" ]; then
             echo "Sleeping for 90 seconds to allow small model to finish downloading..."
             sleep 90
-          elif [ "{{ $name }}" = "large" ]; then
-            echo "Sleeping for 180 seconds to allow small and medium models to finish downloading..."
-            sleep 180
           fi
 
           echo "Parsing credentials..."
