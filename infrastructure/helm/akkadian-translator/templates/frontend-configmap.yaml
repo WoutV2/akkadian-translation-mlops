@@ -29,6 +29,14 @@ data:
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        location /versions {
+            proxy_pass http://akkadian-translator-api:8000/versions;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /feedback {
             proxy_pass http://akkadian-translator-api:8000/feedback;
             proxy_set_header Host $host;
