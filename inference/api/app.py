@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # Trigger rebuild for PyTorch thread optimization deployment
 import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,6 +78,7 @@ class TranslationService:
         self.model_source = model_source
         self.model = model
         self.tokenizer = tokenizer
+        self.lock = threading.Lock()
 
     @classmethod
     def load(cls) -> "TranslationService":
@@ -208,21 +210,22 @@ class TranslationService:
         Executes tokenizer encoding, model generation, and decoding.
         Includes a repetition penalty and prevents repeating n-grams to stabilize output.
         """
-        encoded = self.tokenizer(text, return_tensors="pt", max_length=MAX_SOURCE_LENGTH, truncation=True)
-        if torch.cuda.is_available():
-            encoded = {k: v.to("cuda") for k, v in encoded.items()}
-        with torch.no_grad():
-            generated_tokens = self.model.generate(
-                **encoded,
-                max_new_tokens=MAX_NEW_TOKENS,
-                num_beams=NUM_BEAMS,
-                repetition_penalty=2.0,
-                no_repeat_ngram_size=3,
-                decoder_start_token_id=self.model.config.decoder_start_token_id,
-                forced_bos_token_id=self.model.config.forced_bos_token_id,
-            )
-        translation = self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
-        return translation
+        with self.lock:
+            encoded = self.tokenizer(text, return_tensors="pt", max_length=MAX_SOURCE_LENGTH, truncation=True)
+            if torch.cuda.is_available():
+                encoded = {k: v.to("cuda") for k, v in encoded.items()}
+            with torch.no_grad():
+                generated_tokens = self.model.generate(
+                    **encoded,
+                    max_new_tokens=MAX_NEW_TOKENS,
+                    num_beams=NUM_BEAMS,
+                    repetition_penalty=2.0,
+                    no_repeat_ngram_size=3,
+                    decoder_start_token_id=self.model.config.decoder_start_token_id,
+                    forced_bos_token_id=self.model.config.forced_bos_token_id,
+                )
+            translation = self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+            return translation
 
 # Global translation service instance (lazy-loaded in lifespan)
 translation_service: TranslationService | None = None
