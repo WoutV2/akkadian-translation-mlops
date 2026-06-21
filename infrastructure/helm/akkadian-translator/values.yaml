@@ -86,5 +86,9 @@ ingress:
           pathType: Exact
         - path: /feedback
           pathType: Prefix
+        - path: /docs
+          pathType: Prefix
+        - path: /openapi.json
+          pathType: Exact
         - path: /
           pathType: Prefix

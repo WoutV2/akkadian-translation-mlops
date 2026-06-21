@@ -21,9 +21,9 @@ spec:
         pathType: {{ .pathType }}
         backend:
           service:
-            name: {{ if or (eq .path "/translate") (eq .path "/feedback") }}{{ include "akkadian-translator.fullname" $ }}-api{{ else }}{{ include "akkadian-translator.fullname" $ }}-frontend{{ end }}
+            name: {{ if or (eq .path "/translate") (eq .path "/feedback") (eq .path "/docs") (eq .path "/openapi.json") }}{{ include "akkadian-translator.fullname" $ }}-api{{ else }}{{ include "akkadian-translator.fullname" $ }}-frontend{{ end }}
             port:
-              number: {{ if or (eq .path "/translate") (eq .path "/feedback") }}8000{{ else }}80{{ end }}
+              number: {{ if or (eq .path "/translate") (eq .path "/feedback") (eq .path "/docs") (eq .path "/openapi.json") }}8000{{ else }}80{{ end }}
       {{- end }}
   {{- end }}
 {{- end }}
